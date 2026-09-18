@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Oregon Rockhound Map</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#17150F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<style>
+  :root{
+    --basalt:#17150F; --basalt2:#24211A; --edge:#3B3629;
+    --playa:#DCD3BE; --sage:#8A907A; --copper:#B4530A; --copperlit:#E07A1F;
+    --paper:#F2EDE2;
+    --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;font-family:var(--ui);background:var(--basalt);overscroll-behavior:none}
+  #map{position:absolute;inset:0}
+
+  #status{position:absolute;top:calc(env(safe-area-inset-top) + 10px);left:10px;z-index:5;
+    display:flex;align-items:center;gap:8px;padding:7px 13px 7px 11px;
+    background:rgba(23,21,15,.92);color:var(--playa);border-radius:999px;
+    font-size:13px;line-height:1;backdrop-filter:blur(6px)}
+  #dot{width:8px;height:8px;border-radius:50%;background:#7FA06A;flex:none}
+  body.offline #dot{background:var(--copperlit)}
+
+  #tools{position:absolute;right:10px;top:calc(env(safe-area-inset-top) + 10px);z-index:5;
+    display:flex;flex-direction:column;gap:8px}
+  .tool{width:46px;height:46px;border:none;border-radius:12px;background:rgba(23,21,15,.92);
+    color:var(--playa);font-size:18px;display:grid;place-items:center;cursor:pointer;backdrop-filter:blur(6px)}
+  .tool:focus-visible{outline:2px solid var(--copperlit);outline-offset:2px}
+  .tool.active{background:var(--copper);color:#fff}
+
+  /* panels */
+  .sheet{position:absolute;left:0;right:0;bottom:0;z-index:6;background:var(--basalt);color:var(--playa);
+    border-radius:18px 18px 0 0;padding:0 18px calc(env(safe-area-inset-bottom) + 20px);
+    max-height:82vh;overflow-y:auto;transform:translateY(105%);visibility:hidden;
+    transition:transform .28s cubic-bezier(.32,.72,.34,1),visibility 0s linear .28s;
+    box-shadow:0 -10px 40px rgba(0,0,0,.45)}
+  .sheet.open{transition:transform .28s cubic-bezier(.32,.72,.34,1),visibility 0s}
+  .sheet.open{transform:translateY(0);visibility:visible}
+  @media (prefers-reduced-motion:reduce){.sheet{transition:none}}
+  .sheet h2{margin:0;padding:22px 0 4px;font-size:17px;font-weight:600}
+  .sheet.dragging{transition:none}
+  #grip{position:sticky;top:0;z-index:3;display:flex;justify-content:center;
+    padding:10px 0 4px;margin:0 -18px;background:var(--basalt);cursor:grab}
+  #grip span{display:block;width:38px;height:4px;border-radius:2px;background:#4A4436}
+  .sheet .lede{margin:0 0 10px;font-size:13px;line-height:1.5;color:var(--sage)}
+  .close{position:absolute;right:14px;top:16px;width:34px;height:34px;border:none;border-radius:50%;
+    background:var(--basalt2);color:var(--playa);font-size:17px;cursor:pointer}
+
+  /* layer rows */
+  .layer{display:flex;align-items:center;gap:12px;padding:14px 0;border-top:1px solid var(--basalt2)}
+  .swatch{width:26px;height:26px;border-radius:7px;flex:none;border:1.5px solid rgba(255,255,255,.18)}
+  .layer .txt{flex:1;min-width:0}
+  .layer .nm{font-size:15px;display:block}
+  .layer .src{font-size:12px;color:var(--sage);display:block;margin-top:2px}
+  .layer .miss{color:var(--copperlit)}
+  .sw{position:relative;width:48px;height:28px;flex:none;cursor:pointer}
+  .sw input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;z-index:2}
+  .sw i{position:absolute;inset:0;background:var(--basalt2);border-radius:999px;transition:background .18s;
+    pointer-events:none;z-index:1}
+  .sw i::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;
+    background:var(--playa);transition:transform .18s}
+  .sw input:checked + i{background:var(--copper)}
+  .sw input:checked + i::after{transform:translateX(20px);background:#fff}
+  .sw input:focus-visible + i{outline:2px solid var(--copperlit);outline-offset:2px}
+
+  .impbtn{padding:9px 14px;background:var(--basalt2);color:var(--playa);
+    border:1px solid var(--edge);border-radius:9px;font:inherit;font-size:13.5px;
+    cursor:pointer;margin:0 8px 8px 0}
+  .impbtn:active{background:var(--edge)}
+  .sub{padding:0 0 14px 38px}
+  .sub label{display:block;font-size:12.5px;color:var(--sage);margin-bottom:7px}
+  input[type=range]{width:100%;accent-color:var(--copper)}
+
+  .seg{display:flex;gap:6px;margin:6px 0 16px}
+  .seg button{flex:1;padding:11px 8px;background:var(--basalt2);color:var(--playa);border:1px solid var(--edge);
+    border-radius:10px;font:inherit;font-size:14px;cursor:pointer}
+  .seg button[aria-pressed=true]{background:var(--copper);border-color:var(--copper);color:#fff}
+
+  .row{display:flex;justify-content:space-between;align-items:baseline;padding:11px 0;
+    border-top:1px solid var(--basalt2);font-size:14px}
+  .row span:last-child{color:#fff;font-variant-numeric:tabular-nums}
+  input[type=text]{width:100%;margin-top:8px;padding:11px 12px;background:var(--basalt2);
+    color:var(--playa);border:1px solid var(--edge);border-radius:10px;font:inherit;font-size:15px;
+    -webkit-appearance:none}
+  input[type=text]::placeholder{color:#6A6454}
+  select{width:100%;margin-top:8px;padding:11px 12px;background:var(--basalt2);color:var(--playa);
+    border:1px solid var(--edge);border-radius:10px;font:inherit;font-size:15px}
+  label.field{display:block;padding:14px 0 4px;font-size:14px}
+  #save{width:100%;margin-top:16px;padding:15px;background:var(--copper);color:#fff;border:none;
+    border-radius:12px;font:inherit;font-size:16px;font-weight:600;cursor:pointer}
+  #save:disabled{background:var(--basalt2);color:var(--sage)}
+  #note{margin:14px 0 0;font-size:13px;line-height:1.5;color:var(--sage)}
+  #bar{height:4px;margin-top:12px;background:var(--basalt2);border-radius:2px;overflow:hidden;display:none}
+  #bar.on{display:block}
+  #fill{height:100%;width:0;background:var(--copperlit);transition:width .2s linear}
+
+    padding:3px 0;line-height:1.35}
+    padding-left:10px;font-size:11.5px}
+
+  .area{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--basalt2)}
+  .area .txt{flex:1;min-width:0}
+  .area .nm{font-size:14.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .area .sub2{font-size:12px;color:var(--sage);display:block;margin-top:2px}
+  .area button{border:none;background:var(--basalt2);color:var(--sage);border-radius:9px;
+    padding:9px 13px;font:inherit;font-size:13px;cursor:pointer;flex:none}
+  .area button:hover{background:#3A3428;color:var(--playa)}
+  #areas .none{padding:14px 0;border-top:1px solid var(--basalt2);font-size:13px;color:var(--sage)}
+
+  .warnbox{margin-top:14px;padding:13px 14px;background:#2E2413;border:1px solid #5C4A22;
+    border-radius:11px;font-size:13px;line-height:1.5;color:#E8C88A;display:none}
+  .warnbox.on{display:block}
+
+  .nav{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    margin:-3px 0 10px;padding-bottom:9px;border-bottom:1px solid #DCD4C4}
+  .nav span{font-size:12px;color:#7A7364;font-variant-numeric:tabular-nums}
+  .nav div{display:flex;gap:6px}
+  .nav button{border:1px solid #CFC7B5;background:#E9E3D6;color:#3D3728;border-radius:7px;
+    width:30px;height:28px;font-size:14px;line-height:1;cursor:pointer;padding:0}
+  .nav button:disabled{opacity:.35;cursor:default}
+  .maplibregl-popup-content{max-height:56vh;overflow-y:auto}
+
+  /* we drive location from our own button; hide the library's */
+  .maplibregl-ctrl-top-right{display:none}
+  .maplibregl-ctrl-bottom-right{margin-bottom:6px}
+  .maplibregl-ctrl-attrib{font-size:10px;opacity:.85}
+  .maplibregl-ctrl-bottom-left{margin-bottom:4px}
+
+  #toast{position:absolute;left:50%;transform:translateX(-50%);
+    bottom:calc(env(safe-area-inset-bottom) + 84px);z-index:9;max-width:80vw;
+    background:rgba(23,21,15,.96);color:var(--playa);padding:12px 16px;border-radius:12px;
+    font-size:13.5px;line-height:1.45;text-align:center;opacity:0;pointer-events:none;
+    transition:opacity .2s}
+  #toast.on{opacity:1}
+
+  #compass{display:none}
+  #compass.on{display:grid}
+  #compass .needle{display:block;transition:transform .15s}
+
+  #placing{position:absolute;left:50%;transform:translateX(-50%);
+    top:calc(env(safe-area-inset-top) + 68px);z-index:7;
+    background:var(--copper);color:#fff;padding:11px 18px;border-radius:999px;
+    font-size:14px;box-shadow:0 4px 18px rgba(0,0,0,.4);display:none;white-space:nowrap}
+  #placing.on{display:block}
+
+  .wp{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--basalt2)}
+  .wp .txt{flex:1;min-width:0}
+  .wp .nm{font-size:14.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wp .sub2{font-size:12px;color:var(--sage);display:block;margin-top:2px;font-variant-numeric:tabular-nums}
+  .wp button{border:none;background:var(--basalt2);color:var(--sage);border-radius:9px;
+    padding:9px 13px;font:inherit;font-size:13px;cursor:pointer;flex:none}
+  #wplist .none{padding:14px 0;border-top:1px solid var(--basalt2);font-size:13px;color:var(--sage)}
+
+  .sec{padding-top:26px}
+  .kk{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--playa);padding:3px 0}
+  .kk b{width:11px;height:11px;border-radius:50%;flex:none;border:1.5px solid #fff}
+
+  .maplibregl-popup-content{background:var(--paper);border-radius:10px;padding:14px 16px;
+    font-family:var(--ui);font-size:13.5px;line-height:1.45;color:#221F18;box-shadow:0 6px 22px rgba(0,0,0,.3)}
+  .maplibregl-popup-content h3{margin:0 0 3px;font-size:15.5px}
+  .maplibregl-popup-content .kicker{font-size:11.5px;color:#7A7364;margin:0 0 9px}
+  .maplibregl-popup-content dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px}
+  .maplibregl-popup-content dt{color:#7A7364}
+  .maplibregl-popup-content dd{margin:0}
+  .maplibregl-popup-content .warn{margin:10px 0 0;padding-top:9px;border-top:1px solid #DCD4C4;
+    font-size:12px;color:#8A4B12}
+  .maplibregl-popup-content a{color:#8A4B12}
+  .maplibregl-popup-content .acts{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px;
+    padding-top:10px;border-top:1px solid #DCD4C4}
+  .maplibregl-popup-content .acts a,
+  .maplibregl-popup-content .acts button{border:1px solid #CFC7B5;background:#E9E3D6;
+    color:#5C3A14;border-radius:8px;padding:8px 11px;font:inherit;font-size:12.5px;
+    cursor:pointer;text-decoration:none;line-height:1}
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="toast"></div>
+<div id="status"><span id="dot"></span><span id="statustext">Loading</span></div>
+
+<div id="tools">
+  <button class="tool" id="btn-locate" aria-label="Show my location">◎</button>
+  <button class="tool" id="compass" aria-label="Point map north">
+    <svg class="needle" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+      <polygon points="10,2 13.4,11 10,9 6.6,11" fill="#D6503A"/>
+      <polygon points="10,18 6.6,9 10,11 13.4,9" fill="#DCD3BE"/>
+    </svg>
+  </button>
+  <button class="tool" id="btn-layers" aria-label="Menu">≡</button>
+</div>
+
+
+
+<!-- Layers -->
+<div class="sheet" id="sheet-layers">
+  <div id="grip" aria-hidden="true"><span></span></div>
+  <button class="close" data-close="sheet-layers" aria-label="Close">✕</button>
+  <h2>Layers</h2>
+  <p class="lede">Gem occurrences statewide, and the claims that sit near them. Saved on the phone.</p>
+
+  <div class="seg" role="group" aria-label="Basemap">
+    <button id="bm-topo" aria-pressed="true">Topo</button>
+    <button id="bm-imagery" aria-pressed="false">Imagery</button>
+  </div>
+
+
+  <div class="layer">
+    <span class="swatch" style="background:linear-gradient(135deg,#2C6FB5 0 33%,#2E8B4A 33% 66%,#F2B01E 66%)"></span>
+    <span class="txt"><span class="nm">Mining claims</span><span class="src" id="src-claims">BLM MLRS, not closed</span></span>
+    <span class="sw"><input type="checkbox" id="ck-claims" checked><i></i></span>
+  </div>
+
+
+  <div class="layer">
+    <span class="swatch" style="background:linear-gradient(135deg,#E8A200 0 50%,#98A6B4 50%)"></span>
+    <span class="txt"><span class="nm">Metals</span><span class="src" id="src-milometal">DOGAMI MILO</span></span>
+    <span class="sw"><input type="checkbox" id="ck-milometal" checked><i></i></span>
+  </div>
+  <div class="sub" style="padding-bottom:12px">
+    <div class="kk"><b style="background:#E8A200"></b>Gold</div>
+    <div class="kk"><b style="background:#98A6B4"></b>Silver</div>
+    <div class="kk"><b style="background:#7C5CA8"></b>Other metal</div>
+  </div>
+
+  <div class="layer">
+    <span class="swatch" style="background:linear-gradient(135deg,#C1520F 0 33%,#2E8B8B 33% 66%,#D4569B 66%)"></span>
+    <span class="txt"><span class="nm">Gems and rockhounding</span><span class="src" id="src-milogem">DOGAMI MILO</span></span>
+    <span class="sw"><input type="checkbox" id="ck-milogem" checked><i></i></span>
+  </div>
+  <div class="sub" style="padding-bottom:14px">
+    <div class="kk"><b style="background:#C1520F"></b>Sunstone</div>
+    <div class="kk"><b style="background:#2E8B8B"></b>Agate / jasper</div>
+    <div class="kk"><b style="background:#D4569B"></b>Opal</div>
+    <div class="kk"><b style="background:#6B4423"></b>Petrified wood</div>
+    <div class="kk"><b style="background:#4A6FC4"></b>Thunderegg / crystal</div>
+    <div class="kk"><b style="background:#22222A"></b>Obsidian</div>
+    <div class="kk"><b style="background:#8A9A3B"></b>Other gem</div>
+  </div>
+
+  <div class="layer">
+    <span class="swatch" style="background:#E5007D"></span>
+    <span class="txt"><span class="nm">Imported points</span><span class="src" id="src-custom">No file loaded</span></span>
+    <span class="sw"><input type="checkbox" id="ck-custom"><i></i></span>
+  </div>
+  <div class="sub" style="padding-bottom:16px">
+    <button class="impbtn" id="imp-pick" type="button">Load a file…</button>
+    <button class="impbtn" id="imp-clear" type="button">Remove</button>
+    <input type="file" id="imp-file" accept=".geojson,.json,application/geo+json,application/json" style="display:none">
+    <p class="lede" style="padding:8px 0 0;margin:0">A GeoJSON file from your phone. It stays on this
+      phone — nothing is uploaded and nothing leaves the app.</p>
+  </div>
+
+  <div class="layer">
+    <span class="swatch" style="background:#8C2A06"></span>
+    <span class="txt"><span class="nm">My points</span><span class="src" id="src-wp">None yet</span></span>
+    <span class="sw"><input type="checkbox" id="ck-wp" checked><i></i></span>
+  </div>
+
+  <h2 class="sec">My points</h2>
+  <p class="lede">Press and hold anywhere on the map to drop a point. Saved on this phone only.</p>
+  <div id="wplist"></div>
+
+<h2 class="sec">Offline maps</h2>
+  <p class="lede">Pan to the ground you want, then save it while you still have signal.</p>
+
+  <label class="field" for="areaname">Name this area
+    <input type="text" id="areaname" placeholder="Silvies road cut" maxlength="40" autocomplete="off">
+  </label>
+
+  <label class="field" for="zoom">Detail level
+    <select id="zoom">
+      <option value="14">Roads and basins</option>
+      <option value="15" selected>Two-tracks visible</option>
+      <option value="16">Maximum detail</option>
+    </select>
+  </label>
+
+  <div class="row"><span>Tiles to download</span><span id="est-tiles">—</span></div>
+  <div class="row"><span>Rough download size</span><span id="est-size">—</span></div>
+
+  <div class="warnbox" id="warnbox"></div>
+
+  <button id="save">Save this area</button>
+  <div id="bar"><div id="fill"></div></div>
+  <p id="note">Layer data is already on the phone. This saves the topo and imagery underneath it. Save small areas — the whole state will not fit.</p>
+
+  <h2 style="padding-top:26px">Saved areas</h2>
+  <p class="lede">Storage used: <span id="used">—</span></p>
+  <div id="areas"></div>
+
+</div>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   START VIEW — nudge these if the map opens somewhere odd.
+   Opens on the whole state. Zoom to the ground you want.
+   ============================================================ */
+var START=[-120.40,43.90], START_Z=6;
+var TILE_CACHE="oregon-tiles-v1";
+
+var BASE={
+  topo:{tiles:"https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}",
+        attr:"USGS The National Map"},
+  imagery:{tiles:"https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/{z}/{y}/{x}",
+        attr:"USGS The National Map"}
+};
+
+
+/* Surface management agency colors, close to the usual federal convention. */
+
+
+var map=new maplibregl.Map({
+  container:"map",
+  style:{version:8,
+    sources:{base:{type:"raster",tiles:[BASE.topo.tiles],tileSize:256,maxzoom:16,attribution:BASE.topo.attr}},
+    layers:[{id:"base",type:"raster",source:"base"}]},
+  center:START,zoom:START_Z,maxZoom:17,
+  attributionControl:{compact:true}
+});
+map.addControl(new maplibregl.NavigationControl({showCompass:false}),"bottom-right");
+map.addControl(new maplibregl.ScaleControl({maxWidth:110,unit:"imperial"}),"bottom-left");
+/* Our own location handling. The library's control was hidden to keep the
+   button stack tidy, and a hidden control can refuse to fire — so we drive
+   the browser's geolocation directly and can report what went wrong. */
+var meWatch=null, meFix=null, meFollow=false;
+
+map.on("load",function(){
+  map.addSource("me",{type:"geojson",data:{type:"FeatureCollection",features:[]}});
+  map.addLayer({id:"me-acc",type:"circle",source:"me",
+    paint:{"circle-radius":["get","px"],"circle-color":"#2C6FB5","circle-opacity":.15,
+           "circle-stroke-width":1,"circle-stroke-color":"#2C6FB5","circle-stroke-opacity":.35}});
+  map.addLayer({id:"me-dot",type:"circle",source:"me",
+    paint:{"circle-radius":7,"circle-color":"#2C6FB5",
+           "circle-stroke-width":3,"circle-stroke-color":"#FFFFFF"}});
+});
+
+function metresToPx(m,lat){
+  var z=map.getZoom();
+  var mPerPx=156543.03392*Math.cos(lat*Math.PI/180)/Math.pow(2,z);
+  return Math.max(4,Math.min(160,m/mPerPx));
+}
+
+function drawMe(){
+  var src=map.getSource("me");
+  if(!src||!meFix)return;
+  src.setData({type:"FeatureCollection",features:[{
+    type:"Feature",
+    geometry:{type:"Point",coordinates:[meFix.lon,meFix.lat]},
+    properties:{px:metresToPx(meFix.acc,meFix.lat)}
+  }]});
+}
+map.on("zoom",drawMe);
+
+function toast(msg){
+  var t=document.getElementById("toast");
+  t.textContent=msg; t.classList.add("on");
+  clearTimeout(toast._t);
+  toast._t=setTimeout(function(){t.classList.remove("on");},4200);
+}
+
+function startLocating(){
+  if(!navigator.geolocation){toast("This phone will not share its location.");return;}
+  var btn=document.getElementById("btn-locate");
+  btn.classList.add("active");
+
+  if(meFix){                       /* already have a fix: just go there */
+    meFollow=true;
+    map.easeTo({center:[meFix.lon,meFix.lat],zoom:Math.max(map.getZoom(),14)});
+  }
+
+  if(meWatch!==null)return;
+  meWatch=navigator.geolocation.watchPosition(function(pos){
+    var firstFix=!meFix;
+    meFix={lat:pos.coords.latitude,lon:pos.coords.longitude,
+           acc:pos.coords.accuracy||30};
+    drawMe();
+    if(firstFix||meFollow){
+      meFollow=true;
+      map.easeTo({center:[meFix.lon,meFix.lat],zoom:Math.max(map.getZoom(),14)});
+    }
+  },function(err){
+    btn.classList.remove("active");
+    if(meWatch!==null){navigator.geolocation.clearWatch(meWatch);meWatch=null;}
+    var why=err&&err.message?" ("+err.message+")":"";
+    if(err.code===1) toast("Location permission denied"+why+". If you granted it in Safari, the home-screen app needs its own grant: delete the icon, allow in Safari, then re-add.");
+    else if(err.code===2) toast("Position unavailable"+why+". Outdoors with a clear view of the sky works best.");
+    else toast("Location timed out"+why+".");
+  },{enableHighAccuracy:true,maximumAge:5000,timeout:20000});
+}
+
+function stopLocating(){
+  if(meWatch!==null){navigator.geolocation.clearWatch(meWatch);meWatch=null;}
+  meFollow=false;
+  document.getElementById("btn-locate").classList.remove("active");
+}
+
+/* panning by hand stops the map chasing you, like every other map app */
+map.on("dragstart",function(){meFollow=false;});
+
+document.getElementById("btn-locate").onclick=function(){
+  if(meWatch!==null&&meFollow) stopLocating();
+  else startLocating();
+};
+
+/* ---------- compass ---------- */
+var compass=document.getElementById("compass");
+var needle=compass.querySelector(".needle");
+map.on("rotate",function(){
+  var b=map.getBearing();
+  needle.style.transform="rotate("+(-b)+"deg)";
+  compass.classList.toggle("on",Math.abs(b)>1);
+});
+compass.onclick=function(){ map.easeTo({bearing:0,pitch:0,duration:400}); };
+
+/* ---------- waypoints ---------- */
+var WP_KEY="field-waypoints-v1";
+var placing=false;
+var placeBanner={classList:{add:function(){},remove:function(){},toggle:function(){}}};
+
+function wpLoad(){try{return JSON.parse(localStorage.getItem(WP_KEY))||[];}catch(e){return [];}}
+function wpStore(a){try{localStorage.setItem(WP_KEY,JSON.stringify(a));}catch(e){}}
+function wpGeo(){
+  return {type:"FeatureCollection",features:wpLoad().map(function(w,i){
+    return {type:"Feature",id:i,
+      geometry:{type:"Point",coordinates:[w.lon,w.lat]},
+      properties:{name:w.name,idx:i}};
+  })};
+}
+function wpRefresh(){
+  var src=map.getSource("wp");
+  if(src)src.setData(wpGeo());
+  var list=wpLoad();
+  document.getElementById("src-wp").textContent=
+    list.length?list.length+(list.length===1?" point":" points"):"None yet";
+  var el=document.getElementById("wplist");
+  if(!list.length){
+    el.innerHTML='<div class="none">Nothing yet. Tap ✚ then tap the map.</div>';
+    return;
+  }
+  el.innerHTML=list.map(function(w,i){
+    return '<div class="wp"><span class="txt"><span class="nm">'+esc(w.name)+'</span>'+
+      '<span class="sub2">'+w.lat.toFixed(5)+", "+w.lon.toFixed(5)+'</span></span>'+
+      '<button data-wpgo="'+i+'">Go</button><button data-wpdel="'+i+'">Delete</button></div>';
+  }).join("");
+  el.querySelectorAll("[data-wpgo]").forEach(function(b){
+    b.onclick=function(){
+      var w=wpLoad()[+b.dataset.wpgo];
+      map.easeTo({center:[w.lon,w.lat],zoom:Math.max(map.getZoom(),15)});
+      closeSheets();
+    };
+  });
+  el.querySelectorAll("[data-wpdel]").forEach(function(b){
+    b.onclick=function(){
+      if(b.dataset.sure!=="1"){b.dataset.sure="1";b.textContent="Sure?";
+        setTimeout(function(){if(b.dataset.sure==="1"){b.dataset.sure="";b.textContent="Delete";}},4000);
+        return;}
+      var a=wpLoad();a.splice(+b.dataset.wpdel,1);wpStore(a);wpRefresh();
+    };
+  });
+}
+
+/* Long-press anywhere on the map drops a point. iOS Safari wants to run its
+   own press-and-hold menu, so we time the touch ourselves, cancel the default,
+   and bail out if the finger moves (that's a pan, not a press). */
+(function longPress(){
+  var timer=null, startPt=null, fired=false;
+  var HOLD=550, SLOP=12;
+
+  function begin(pt,lngLat){
+    cancel(); fired=false; startPt=pt;
+    timer=setTimeout(function(){
+      fired=true; timer=null;
+      if(navigator.vibrate)try{navigator.vibrate(18);}catch(e){}
+      dropAt(lngLat);
+    },HOLD);
+  }
+  function moved(pt){
+    if(!timer||!startPt)return;
+    if(Math.abs(pt.x-startPt.x)>SLOP||Math.abs(pt.y-startPt.y)>SLOP)cancel();
+  }
+  function cancel(){ if(timer){clearTimeout(timer);timer=null;} }
+
+  var c=map.getCanvasContainer();
+  c.addEventListener("contextmenu",function(e){e.preventDefault();});
+
+  map.on("touchstart",function(e){
+    if(e.points&&e.points.length>1){cancel();return;}
+    begin(e.point,e.lngLat);
+  });
+  map.on("touchmove",function(e){ moved(e.point); });
+  map.on("touchend",function(e){
+    cancel();
+    if(fired&&e.originalEvent){e.originalEvent.preventDefault();fired=false;}
+  });
+  map.on("touchcancel",cancel);
+  map.on("dragstart",cancel);
+  map.on("zoomstart",cancel);
+
+  /* desktop: press and hold the mouse button */
+  map.on("mousedown",function(e){ begin(e.point,e.lngLat); });
+  map.on("mousemove",function(e){ moved(e.point); });
+  map.on("mouseup",cancel);
+
+  /* the click handler must not also fire right after a long press */
+  window.__wpJustDropped=0;
+})();
+
+function dropAt(lngLat){
+  var name=prompt("Name this point","Point "+(wpLoad().length+1));
+  window.__wpJustDropped=Date.now();
+  placing=false;
+  placeBanner.classList.remove("on");
+  if(name===null)return;
+  var a=wpLoad();
+  a.push({name:(name||"").trim()||("Point "+(a.length+1)),
+          lat:lngLat.lat,lon:lngLat.lng,date:Date.now()});
+  wpStore(a);wpRefresh();
+}
+
+
+
+document.getElementById("ck-wp").addEventListener("change",function(){
+  ["wp-dot","wp-ring","wp-label"].forEach(function(id){
+    if(map.getLayer(id))map.setLayoutProperty(id,"visibility",this.checked?"visible":"none");
+  },this);
+});
+
+/* ---------- helpers ---------- */
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+function first(p){for(var i=1;i<arguments.length;i++){var v=p[arguments[i]];
+  if(v!==undefined&&v!==null&&v!=="" &&v!=="Null")return v;}return null;}
+function matchExpr(field,table,fallback){
+  var e=["match",["coalesce",["get",field],""]];
+  Object.keys(table).forEach(function(k){e.push(k,table[k]);});
+  e.push(fallback);return e;
+}
+function rows(list){
+  var r=list.filter(function(x){return x[1];});
+  if(!r.length)return "";
+  return "<dl>"+r.map(function(x){
+    return "<dt>"+esc(x[0])+"</dt><dd>"+esc(String(x[1]))+"</dd>";}).join("")+"</dl>";
+}
+
+/* ---------- claim helpers ---------- */
+var CLAIM_TYPE={
+  "384101":"Lode claim","384103":"Lode claim",
+  "384201":"Placer claim","384203":"Placer claim",
+  "384301":"Mill site","384303":"Mill site",
+  "384401":"Tunnel site","384403":"Tunnel site"
+};
+
+/* BLM scores how well each claim could be tied to the survey grid.
+   Low numbers are good. These bands come from BLM's own grouping. */
+function qualityNote(q){
+  var n=parseInt(q,10);
+  if(isNaN(n))return null;
+  if(n<=3)  return "Tied directly to the survey grid. About as good as this data gets.";
+  if(n<=8)  return "Estimated from the survey grid. Treat the outline as approximate.";
+  if(n<=10) return "Located only to the section. The claim is somewhere in this square mile.";
+  if(n<=12) return "No survey match. This outline is a placeholder.";
+  if(n===15)return "Partly mapped. Some of this claim has no location data.";
+  if(n<=22) return "No survey match. This outline is a placeholder.";
+  if(n===25)return "Mapped only to the county.";
+  if(n===100)return "Hand-corrected by BLM staff.";
+  return null;
+}
+
+function claimPopup(p){
+  var type=CLAIM_TYPE[first(p,"CSE_TYPE_NR")]||first(p,"CSE_TYPE_NR")||"Mining claim";
+  var acres=first(p,"RCRD_ACRS");
+  var note=qualityNote(first(p,"QLTY"));
+  var html="<h3>"+esc(first(p,"CSE_NAME")||"Unnamed claim")+"</h3>";
+  html+='<p class="kicker">'+esc(type)+
+        (first(p,"CSE_NR")?" &middot; "+esc(first(p,"CSE_NR")):"")+"</p>";
+  html+=rows([
+    ["Status",first(p,"CSE_DISP")],
+    ["Also here",p._mix?"Both lode and placer claims cover this ground":null],
+    ["Occurrences in this block",first(p,"_occ")],
+    ["Acres",acres?Number(acres).toFixed(1):null],
+    ["Serial",first(p,"CSE_NR")],
+    ["Legacy no.",first(p,"LEG_CSE_NR")]
+  ]);
+  html+='<p class="warn">'+(note?esc(note)+" ":"")+
+    "BLM records claims only to the affected quarter sections. The staked corners are in the Notice of Location at the county and the BLM state office.</p>";
+  if(p._occ)
+    html+='<p class="warn">Occurrences listed above are what DOGAMI has recorded on this ground. '+
+      "They are not what the claim is filed for &mdash; BLM's claim data carries no commodity.</p>";
+  return html;
+}
+
+/* DOGAMI groups occurrences by Type. Their own legend colours are pale
+   pastels meant for a white background, so these are darkened versions that
+   stay legible on topo and imagery. */
+var CAT_COLOR={
+  gold:"#E8A200", silver:"#98A6B4", metal:"#7C5CA8",
+  sunstone:"#C1520F", opal:"#D4569B", agate:"#2E8B8B",
+  wood:"#6B4423", thunderegg:"#4A6FC4", obsidian:"#22222A", gem_other:"#8A9A3B"
+};
+var CAT_LABEL={
+  gold:"Gold", silver:"Silver", metal:"Other metal",
+  sunstone:"Sunstone", opal:"Opal", agate:"Agate / jasper",
+  wood:"Petrified wood", thunderegg:"Thunderegg / crystal",
+  obsidian:"Obsidian", gem_other:"Other gem"
+};
+var MILO_COLORS=(function(){
+  var e=["match",["coalesce",["get","_cat"],""]];
+  Object.keys(CAT_COLOR).forEach(function(k){e.push(k,CAT_COLOR[k]);});
+  e.push("#7A6A55"); return e;
+})();
+/* gold and silver get drawn a touch larger than the rest */
+var MILO_RADIUS=["interpolate",["linear"],["zoom"],
+  9,["case",["in",["get","_cat"],["literal",["gold","silver"]]],4,2.8],
+  13,["case",["in",["get","_cat"],["literal",["gold","silver"]]],7,5],
+  16,["case",["in",["get","_cat"],["literal",["gold","silver"]]],10,7]];
+
+function miloPopup(p){
+  var name=first(p,"SiteName");
+  if(!name||/^unnamed/i.test(name))name="Unnamed occurrence";
+  var mineral=first(p,"CommodityAbreviation");
+  var html="<h3>"+esc(name)+"</h3>";
+  var kick=[CAT_LABEL[first(p,"_cat")]||mineral||first(p,"Commodity"),
+            first(p,"WorkingsType")].filter(Boolean).join(" &middot; ");
+  if(kick)html+='<p class="kicker">'+esc(kick)+"</p>";
+
+  var trs=first(p,"Township"), rng=first(p,"Range"), sec=first(p,"Section");
+  var legal=(sec?"Sec "+sec+" ":"")+(trs||"")+(rng?" "+rng:"");
+
+  html+=rows([
+    ["Mineral",mineral],
+    ["Recorded as",first(p,"Commodity")],
+    ["Produced",first(p,"CommoditiesProduced")],
+    ["Deposit",first(p,"DepositType")],
+    ["Host rock",first(p,"MapUnitName")||first(p,"ThematicLithology")],
+    ["Formation",first(p,"ThematicFormation")],
+    ["Age",first(p,"ThematicAge")],
+    ["Owner of record",first(p,"Owner")],
+    ["Location",legal.trim()||null],
+    ["County",first(p,"County")],
+    ["Elevation",first(p,"ElevationFeet")?first(p,"ElevationFeet")+" ft":null],
+    ["Quad",first(p,"TopoMap24k")],
+    ["Discovered",first(p,"YearOfDiscovery")]
+  ]);
+
+  var wd=first(p,"WorkingsDescription");
+  if(wd)html+='<p class="warn" style="color:#3D3728;border-top-color:#DCD4C4">'+esc(wd)+"</p>";
+
+  var refs=[first(p,"ShortReference1"),first(p,"ShortReference2"),first(p,"ShortReference3")]
+    .filter(Boolean);
+  if(refs.length)html+='<p class="kicker" style="margin:9px 0 0">Source: '+esc(refs.join("; "))+"</p>";
+
+  html+='<p class="warn">A recorded occurrence, not a claim and not permission to collect. '+
+        "The owner shown is DOGAMI&rsquo;s record and may be years out of date.</p>";
+  return html;
+}
+
+/* ---------- layer definitions ---------- */
+var LAYERS=[
+  {
+    id:"milometal", file:"data/milo.geojson", check:"ck-milometal", src:"src-milometal",
+    order:4, defaultOn:true, point:true, filter:["==",["get","_grp"],"metal"],
+    popup:function(p){return miloPopup(p);}
+  },
+  {
+    id:"milogem", file:"data/milo.geojson", check:"ck-milogem", src:"src-milogem",
+    order:5, defaultOn:true, point:true, filter:["==",["get","_grp"],"gem"],
+    popup:function(p){return miloPopup(p);}
+  },
+  {
+    id:"claims", file:"data/claims.geojson", check:"ck-claims", src:"src-claims",
+    order:3, defaultOn:true, opacity:0, hitFill:true,
+    line:function(){return ["case",
+      ["==",["get","_mix"],1], "#2E8B4A",
+      ["match",["coalesce",["get","CSE_TYPE_NR"],""],
+        "384201","#F2B01E","384203","#F2B01E",
+        "384101","#2C6FB5","384103","#2C6FB5",
+        "384301","#8B4A6B","384303","#8B4A6B",
+        "384401","#6B4A8B","384403","#6B4A8B","#8A7E6A"]];},
+    lineWidth:1.5,
+    label:["coalesce",["get","CSE_NAME"],["get","CSE_NR"],""],
+    popup:function(p){return claimPopup(p);}
+  },
+  {
+    /* Loaded from a file on the phone, never from the web. See customApply. */
+    id:"custom", local:true, custom:true, check:"ck-custom", src:"src-custom",
+    order:6, defaultOn:false,
+    popup:function(p){return customPopup(p);}
+  }
+];
+
+/* ---------- load ---------- */
+var loaded={}, RAW={};
+map.on("load",function(){
+  map.addSource("wp",{type:"geojson",data:wpGeo()});
+  map.addLayer({id:"wp-ring",type:"circle",source:"wp",
+    paint:{"circle-radius":14,"circle-color":"#7A1F05","circle-opacity":.22}});
+  map.addLayer({id:"wp-dot",type:"circle",source:"wp",
+    paint:{"circle-radius":8,"circle-color":"#8C2A06",
+           "circle-stroke-width":3,"circle-stroke-color":"#FFFFFF"}});
+  map.addLayer({id:"wp-label",type:"symbol",source:"wp",minzoom:11,
+    layout:{"text-field":["get","name"],"text-size":13.5,"text-offset":[0,1.15],
+            "text-anchor":"top","text-allow-overlap":false,
+            "text-font":["Open Sans Bold","Arial Unicode MS Bold"]},
+    paint:{"text-color":"#4A1502","text-halo-color":"#FFFFFF","text-halo-width":2.2}});
+  wpRefresh();
+
+  LAYERS.forEach(function(L){
+    if(L.local){ customBoot(L); return; }
+    fetch(L.file).then(function(r){return r.ok?r.json():null;}).then(function(g){
+      if(!g||!g.features||!g.features.length){markMissing(L);return;}
+      if(L.id==="claims")markMixedClaims(g);
+      build(L,g);
+      loaded[L.id]=true;
+      RAW[L.id]=g;
+      if(L.id==="milometal")RAW.milo=g;
+      if(RAW.claims&&RAW.milo)crossReference(RAW.claims,RAW.milo);
+      var ck=document.getElementById(L.check);
+      ck.disabled=false;
+      setVisible(L,ck.checked);
+      var n=g.features.length;
+      if(L.filter&&L.filter[1]&&L.filter[1][1]==="_grp"){
+        var want=L.filter[2];
+        n=g.features.filter(function(f){return f.properties&&f.properties._grp===want;}).length;
+      }
+      document.getElementById(L.src).textContent=n.toLocaleString()+" recorded";
+    }).catch(function(){markMissing(L);});
+  });
+});
+
+/* ---------- imported points ----------
+   A GeoJSON file picked from the phone. Kept in this phone's own storage,
+   never fetched from the web and never sent anywhere. Clearing Safari's
+   website data removes it, so keep the original file somewhere safe. */
+var CUSTOM_KEY="fieldmap.custom.v1";
+
+function customLoad(){
+  try{return JSON.parse(localStorage.getItem(CUSTOM_KEY));}catch(e){return null;}
+}
+function customStore(o){
+  try{localStorage.setItem(CUSTOM_KEY,JSON.stringify(o));return true;}catch(e){return false;}
+}
+function customBlank(L){
+  var el=document.getElementById(L.src);
+  el.textContent="No file loaded";
+  el.classList.add("miss");
+  var ck=document.getElementById(L.check);
+  ck.checked=false; ck.disabled=true;
+}
+function customBoot(L){
+  var saved=customLoad();
+  if(saved&&saved.geojson&&saved.geojson.features&&saved.geojson.features.length)
+    customApply(L,saved.geojson,saved.name,false);
+  else customBlank(L);
+}
+function customApply(L,geoj,fname,persist){
+  if(map.getSource(L.id))map.getSource(L.id).setData(geoj);
+  else build(L,geoj);
+  loaded[L.id]=true;
+  RAW[L.id]=geoj;
+  var n=geoj.features.length;
+  var el=document.getElementById(L.src);
+  el.classList.remove("miss");
+  el.textContent=n.toLocaleString()+(n===1?" feature":" features")+(fname?" · "+fname:"");
+  var ck=document.getElementById(L.check);
+  ck.disabled=false; ck.checked=true;
+  setVisible(L,true);
+  if(persist&&!customStore({name:fname||"",savedAt:Date.now(),geojson:geoj}))
+    toast("Loaded, but too big to keep. It will be gone next time you open the app.");
+}
+function customPopup(p){
+  p=p||{};
+  var title=first(p,"name","Name","title","Title","SiteName","label","Label","id","ID")||"Imported feature";
+  var skip={name:1,Name:1,title:1,Title:1,SiteName:1,label:1,Label:1};
+  var list=[];
+  Object.keys(p).forEach(function(k){
+    if(skip[k])return;
+    var v=p[k];
+    if(v===null||v===undefined||v===""||typeof v==="object")return;
+    list.push([k,String(v)]);
+  });
+  return "<h3>"+esc(title)+"</h3>"+
+    '<p class="kicker">From your imported file</p>'+rows(list);
+}
+
+(function importWiring(){
+  var L=LAYERS.filter(function(x){return x.id==="custom";})[0];
+  var pick=document.getElementById("imp-pick");
+  var file=document.getElementById("imp-file");
+  var clear=document.getElementById("imp-clear");
+  if(!L||!pick||!file||!clear)return;
+
+  pick.onclick=function(){ file.value=""; file.click(); };
+
+  file.onchange=function(){
+    var f=file.files&&file.files[0];
+    if(!f)return;
+    var rd=new FileReader();
+    rd.onerror=function(){ toast("Could not read that file."); };
+    rd.onload=function(){
+      var g;
+      try{ g=JSON.parse(rd.result); }
+      catch(err){ toast("That file is not readable as GeoJSON."); return; }
+      if(g&&g.type==="Feature")g={type:"FeatureCollection",features:[g]};
+      if(!g||g.type!=="FeatureCollection"||!g.features||!g.features.length){
+        toast("No features found in that file."); return;
+      }
+      customApply(L,g,f.name,true);
+      toast(g.features.length+" loaded from "+f.name);
+    };
+    rd.readAsText(f);
+  };
+
+  clear.onclick=function(){
+    try{ localStorage.removeItem(CUSTOM_KEY); }catch(e){}
+    if(map.getSource(L.id))
+      map.getSource(L.id).setData({type:"FeatureCollection",features:[]});
+    loaded[L.id]=false;
+    customBlank(L);
+    toast("Imported points removed.");
+  };
+})();
+
+function markMissing(L){
+  var el=document.getElementById(L.src);
+  el.textContent="Not downloaded yet — run fetch.py";
+  el.classList.add("miss");
+  var ck=document.getElementById(L.check);
+  ck.checked=false; ck.disabled=true;
+}
+
+/* A claim gets marked "_mix" when a claim of the other kind (lode vs placer)
+   covers substantially the same ground. Those draw green, so a block holding
+   both reads at a glance. Compared by bounding box, which is right for the
+   survey-grid rectangles BLM hands back. */
+/* Ray casting: is this point inside this ring? */
+function inRing(pt,ring){
+  var x=pt[0],y=pt[1],hit=false;
+  for(var i=0,j=ring.length-1;i<ring.length;j=i++){
+    var xi=ring[i][0],yi=ring[i][1],xj=ring[j][0],yj=ring[j][1];
+    if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/((yj-yi)||1e-12)+xi))hit=!hit;
+  }
+  return hit;
+}
+function inGeom(pt,g){
+  if(!g)return false;
+  if(g.type==="Polygon")return inRing(pt,g.coordinates[0]);
+  if(g.type==="MultiPolygon")
+    return g.coordinates.some(function(poly){return inRing(pt,poly[0]);});
+  return false;
+}
+
+/* Tallies which recorded occurrences fall inside each claim block. This is a
+   spatial fact about the ground, NOT a statement about what the claim is for:
+   BLM's data carries no commodity, and staking over an old occurrence proves
+   nothing about intent. Phrased that way in the popup on purpose. */
+function crossReference(claims,milo){
+  var pts=(milo.features||[]).map(function(f){
+    if(!f.geometry||f.geometry.type!=="Point")return null;
+    var cat=f.properties&&f.properties._cat;
+    return {c:f.geometry.coordinates,
+            com:(cat&&CAT_LABEL[cat])||(f.properties&&f.properties.Commodity)||"unrecorded"};
+  }).filter(Boolean);
+  if(!pts.length)return;
+
+  (claims.features||[]).forEach(function(cf){
+    var tally={};
+    pts.forEach(function(p){
+      if(inGeom(p.c,cf.geometry)){
+        var k=String(p.com).trim();
+        tally[k]=(tally[k]||0)+1;
+      }
+    });
+    var keys=Object.keys(tally);
+    if(!keys.length)return;
+    keys.sort(function(a,b){return tally[b]-tally[a];});
+    cf.properties._occ=keys.map(function(k){
+      return k+(tally[k]>1?" ("+tally[k]+")":"");
+    }).join(", ");
+  });
+
+  var src=map.getSource("claims");
+  if(src)src.setData(claims);
+}
+
+function markMixedClaims(geoj){
+  var LODE={"384101":1,"384103":1}, PLACER={"384201":1,"384203":1};
+  var items=[];
+  (geoj.features||[]).forEach(function(f){
+    var t=f.properties&&f.properties.CSE_TYPE_NR;
+    var kind=LODE[t]?"L":(PLACER[t]?"P":null);
+    if(!kind||!f.geometry)return;
+    var b=[Infinity,Infinity,-Infinity,-Infinity];
+    (function walk(c){
+      if(typeof c[0]==="number"){
+        if(c[0]<b[0])b[0]=c[0]; if(c[1]<b[1])b[1]=c[1];
+        if(c[0]>b[2])b[2]=c[0]; if(c[1]>b[3])b[3]=c[1];
+      } else c.forEach(walk);
+    })(f.geometry.coordinates);
+    items.push({f:f,kind:kind,b:b});
+  });
+
+  function area(b){return Math.max(0,b[2]-b[0])*Math.max(0,b[3]-b[1]);}
+  function overlapFrac(a,c){
+    var w=Math.min(a[2],c[2])-Math.max(a[0],c[0]);
+    var h=Math.min(a[3],c[3])-Math.max(a[1],c[1]);
+    if(w<=0||h<=0)return 0;
+    var small=Math.min(area(a),area(c));
+    return small>0 ? (w*h)/small : 0;
+  }
+
+  for(var i=0;i<items.length;i++){
+    for(var j=i+1;j<items.length;j++){
+      if(items[i].kind===items[j].kind)continue;
+      if(overlapFrac(items[i].b,items[j].b)>0.35){
+        items[i].f.properties._mix=1;
+        items[j].f.properties._mix=1;
+      }
+    }
+  }
+  return geoj;
+}
+
+function build(L,geoj){
+  if(!map.getSource(L.id))map.addSource(L.id,{type:"geojson",data:geoj});
+  var vis=L.defaultOn?"visible":"none";
+
+  if(L.custom){
+    map.addLayer({id:L.id+"-f",type:"circle",source:L.id,layout:{visibility:vis},
+      filter:["==",["geometry-type"],"Point"],
+      paint:{"circle-radius":11,
+             "circle-color":["case",["==",["get","status"],"known deposit"],"#5C5548","#E5007D"],
+             "circle-stroke-width":2.2,"circle-stroke-color":"#FFFFFF"}});
+    map.addLayer({id:L.id+"-l",type:"line",source:L.id,layout:{visibility:vis},
+      filter:["!=",["geometry-type"],"Point"],
+      paint:{"line-color":"#E5007D","line-width":2}});
+    /* short labels — a rank number — sit inside the dot and never hide */
+    map.addLayer({id:L.id+"-t",type:"symbol",source:L.id,
+      filter:["all",["==",["geometry-type"],"Point"],
+              ["<=",["length",["coalesce",["get","label"],["get","name"],""]],3]],
+      layout:{visibility:vis,
+        "text-field":["coalesce",["get","label"],["get","name"],""],
+        "text-size":13,"text-anchor":"center","text-allow-overlap":true,
+        "text-ignore-placement":true,
+        "text-font":["Open Sans Bold","Arial Unicode MS Bold"]},
+      paint:{"text-color":"#FFFFFF"}});
+    /* anything longer is written beside the dot instead */
+    map.addLayer({id:L.id+"-t2",type:"symbol",source:L.id,minzoom:10,
+      filter:[">",["length",["coalesce",["get","label"],["get","name"],""]],3],
+      layout:{visibility:vis,
+        "text-field":["coalesce",["get","label"],["get","name"],""],
+        "text-size":12,"text-offset":[0,1.2],"text-anchor":"top",
+        "text-allow-overlap":false},
+      paint:{"text-color":"#7A0044","text-halo-color":"rgba(255,255,255,.95)",
+             "text-halo-width":2}});
+    return;
+  }
+
+  if(L.point){
+    var dot={id:L.id+"-f",type:"circle",source:L.id,layout:{visibility:vis},
+      paint:{"circle-radius":MILO_RADIUS,"circle-color":MILO_COLORS,
+             "circle-stroke-width":1.6,"circle-stroke-color":"#FFFFFF",
+             "circle-stroke-opacity":.95}};
+    var lbl={id:L.id+"-t",type:"symbol",source:L.id,minzoom:13,
+      layout:{visibility:vis,"text-field":["coalesce",["get","SiteName"],""],
+              "text-size":11.5,"text-offset":[0,1.0],"text-anchor":"top",
+              "text-allow-overlap":false},
+      paint:{"text-color":"#2E2A20","text-halo-color":"rgba(255,255,255,.95)",
+             "text-halo-width":1.7}};
+    if(L.filter){dot.filter=L.filter;lbl.filter=L.filter;}
+    map.addLayer(dot); map.addLayer(lbl);
+    return;
+  }
+
+  if(L.opacity>0&&L.fill){
+    map.addLayer({id:L.id+"-f",type:"fill",source:L.id,layout:{visibility:vis},
+      paint:{"fill-color":L.fill(),"fill-opacity":L.opacity}});
+  } else if(L.hitFill){
+    /* invisible fill so the whole claim block is tappable, not just its edge */
+    map.addLayer({id:L.id+"-f",type:"fill",source:L.id,layout:{visibility:vis},
+      paint:{"fill-color":"#000","fill-opacity":0.01}});
+  }
+
+  map.addLayer({id:L.id+"-l",type:"line",source:L.id,layout:{visibility:vis},
+    paint:Object.assign({
+      "line-color":typeof L.line==="function"?L.line():L.line,
+      "line-width":L.lineWidth||1
+    },L.dash?{"line-dasharray":L.dash}:{})});
+
+  if(L.label){
+    map.addLayer({id:L.id+"-t",type:"symbol",source:L.id,minzoom:13,
+      layout:{visibility:vis,"text-field":L.label,"text-size":12,"text-allow-overlap":false},
+      paint:{"text-color":"#2C1A12","text-halo-color":"rgba(242,237,226,.92)","text-halo-width":1.6}});
+  }
+}
+
+/* One tap, one popup. Collects everything under the finger across all
+   visible layers, claims first, and lets you page through the stack. */
+var openPopup=null;
+map.on("click",function(e){
+  /* swallow the click that trails a long press */
+  if(Date.now()-(window.__wpJustDropped||0)<700)return;
+
+
+
+  /* an existing point takes priority over anything under it */
+  var wpHit=map.queryRenderedFeatures(
+    [[e.point.x-10,e.point.y-10],[e.point.x+10,e.point.y+10]],{layers:["wp-dot"]});
+  if(wpHit.length){
+    var w=wpLoad()[wpHit[0].properties.idx];
+    if(w){
+      if(openPopup)openPopup.remove();
+      openPopup=new maplibregl.Popup({maxWidth:"260px"}).setLngLat([w.lon,w.lat])
+        .setHTML("<h3>"+esc(w.name)+"</h3>"+
+          '<p class="kicker" id="wpco">'+w.lat.toFixed(5)+", "+w.lon.toFixed(5)+"</p>"+
+          '<div class="acts">'+
+            '<a href="https://maps.apple.com/?daddr='+w.lat+","+w.lon+'&dirflg=d">Apple Maps</a>'+
+            '<a href="https://www.google.com/maps/dir/?api=1&destination='+w.lat+","+w.lon+'&travelmode=driving">Google Maps</a>'+
+            '<button id="wpcopy">Copy coords</button>'+
+            '<button id="wprename">Rename</button>'+
+          "</div>").addTo(map);
+      var co=w.lat.toFixed(5)+", "+w.lon.toFixed(5);
+      var cb=document.getElementById("wpcopy");
+      if(cb)cb.onclick=function(){
+        var done=function(){cb.textContent="Copied";setTimeout(function(){cb.textContent="Copy coords";},1600);};
+        if(navigator.clipboard&&navigator.clipboard.writeText)
+          navigator.clipboard.writeText(co).then(done,done);
+        else{var t=document.createElement("textarea");t.value=co;document.body.appendChild(t);
+             t.select();try{document.execCommand("copy");}catch(e){}t.remove();done();}
+      };
+      var rb=document.getElementById("wprename");
+      if(rb)rb.onclick=function(){
+        var n=prompt("Rename this point",w.name);
+        if(n===null)return;
+        var a=wpLoad();a[wpHit[0].properties.idx].name=(n||"").trim()||w.name;
+        wpStore(a);wpRefresh();openPopup.remove();
+      };
+      return;
+    }
+  }
+
+  var pad=6;
+  var box=[[e.point.x-pad,e.point.y-pad],[e.point.x+pad,e.point.y+pad]];
+  var ids=[];
+  LAYERS.forEach(function(L){
+    if(!loaded[L.id])return;
+    if(!document.getElementById(L.check).checked)return;
+    if(L.custom){
+      if(map.getLayer(L.id+"-f"))ids.push(L.id+"-f");
+      if(map.getLayer(L.id+"-l"))ids.push(L.id+"-l");
+      return;
+    }
+    if(map.getLayer(L.id+"-f"))ids.push(L.id+"-f");
+    else if(map.getLayer(L.id+"-l"))ids.push(L.id+"-l");
+  });
+  if(!ids.length)return;
+
+  var hits=map.queryRenderedFeatures(box,{layers:ids});
+  if(!hits.length)return;
+
+  var order={custom:-1,claims:0,sma:2};
+  var items=[];
+  var seen={};
+  hits.forEach(function(f){
+    var lid=f.layer.id.replace(/-(f|l)$/,"");
+    var key=lid+":"+(f.properties.OBJECTID||f.properties.ID||JSON.stringify(f.properties).slice(0,80));
+    if(seen[key])return; seen[key]=true;
+    items.push({lid:lid,props:f.properties});
+  });
+  items.sort(function(a,b){return (order[a.lid]|0)-(order[b.lid]|0);});
+
+  var i=0;
+  function render(){
+    var it=items[i];
+    var L=LAYERS.filter(function(x){return x.id===it.lid;})[0];
+    var head="";
+    if(items.length>1){
+      head='<div class="nav"><span>'+(i+1)+" of "+items.length+" here</span>"+
+        '<div><button id="pv"'+(i===0?" disabled":"")+' aria-label="Previous">&#8249;</button>'+
+        '<button id="nx"'+(i===items.length-1?" disabled":"")+' aria-label="Next">&#8250;</button></div></div>';
+    }
+    openPopup.setHTML(head+L.popup(it.props));
+    var pv=document.getElementById("pv"),nx=document.getElementById("nx");
+    if(pv)pv.onclick=function(){if(i>0){i--;render();}};
+    if(nx)nx.onclick=function(){if(i<items.length-1){i++;render();}};
+  }
+
+  if(openPopup)openPopup.remove();
+  openPopup=new maplibregl.Popup({maxWidth:"300px"}).setLngLat(e.lngLat).addTo(map);
+  render();
+});
+
+function setVisible(L,on){
+  ["-f","-l","-t","-t2"].forEach(function(s){
+    if(map.getLayer(L.id+s)) map.setLayoutProperty(L.id+s,"visibility",on?"visible":"none");
+  });
+}
+
+LAYERS.forEach(function(L){
+  var ck=document.getElementById(L.check);
+  ck.checked=L.defaultOn; ck.disabled=true;
+  ck.addEventListener("change",function(){ if(loaded[L.id]) setVisible(L,ck.checked); });
+  if(L.opSlider){
+    document.getElementById(L.opSlider).addEventListener("input",function(){
+      if(map.getLayer(L.id+"-f")) map.setPaintProperty(L.id+"-f","fill-opacity",this.value/100);
+    });
+  }
+});
+
+
+/* ---------- basemap ---------- */
+function setBase(k){
+  map.getSource("base").setTiles([BASE[k].tiles]);
+  document.getElementById("bm-topo").setAttribute("aria-pressed",String(k==="topo"));
+  document.getElementById("bm-imagery").setAttribute("aria-pressed",String(k==="imagery"));
+}
+document.getElementById("bm-topo").onclick=function(){setBase("topo");};
+document.getElementById("bm-imagery").onclick=function(){setBase("imagery");};
+
+/* ---------- sheets ---------- */
+function openSheet(){
+  document.getElementById("sheet-layers").classList.add("open");
+  document.getElementById("btn-layers").classList.add("active");
+  usage();renderAreas();wpRefresh();
+  checkSpace().then(estimate);
+}
+function closeSheets(){
+  document.getElementById("sheet-layers").classList.remove("open");
+  document.getElementById("btn-layers").classList.remove("active");
+}
+document.getElementById("btn-layers").onclick=function(){
+  this.classList.contains("active")?closeSheets():openSheet();};
+document.querySelectorAll("[data-close]").forEach(function(b){b.onclick=closeSheets;});
+
+/* Pull the panel down to dismiss it. Only engages when the panel is already
+   scrolled to the top, so normal scrolling through the layer list still works. */
+(function swipeToClose(){
+  var sheet=document.getElementById("sheet-layers");
+  var y0=null, dy=0, active=false;
+
+  sheet.addEventListener("touchstart",function(e){
+    if(e.touches.length!==1)return;
+    y0=e.touches[0].clientY; dy=0;
+    active=sheet.scrollTop<=0;
+  },{passive:true});
+
+  sheet.addEventListener("touchmove",function(e){
+    if(y0===null)return;
+    dy=e.touches[0].clientY-y0;
+
+    if(!active){
+      if(sheet.scrollTop<=0&&dy>0){ active=true; y0=e.touches[0].clientY; dy=0; }
+      else return;
+    }
+    if(dy<=0){ sheet.classList.remove("dragging"); sheet.style.transform=""; return; }
+
+    e.preventDefault();
+    sheet.classList.add("dragging");
+    sheet.style.transform="translateY("+dy+"px)";
+  },{passive:false});
+
+  function release(){
+    if(y0===null)return;
+    sheet.classList.remove("dragging");
+    sheet.style.transform="";
+    if(active&&dy>95)closeSheets();
+    y0=null; dy=0; active=false;
+  }
+  sheet.addEventListener("touchend",release);
+  sheet.addEventListener("touchcancel",release);
+})();
+
+/* ---------- status ---------- */
+var st=document.getElementById("statustext");
+function showStatus(){
+  document.body.classList.toggle("offline",!navigator.onLine);
+  st.textContent=navigator.onLine?"Online":"Offline — using saved maps";
+}
+addEventListener("online",showStatus);addEventListener("offline",showStatus);showStatus();
+
+/* ---------- offline tiles ---------- */
+var saveBtn=document.getElementById("save"),bar=document.getElementById("bar"),
+    fill=document.getElementById("fill"),note=document.getElementById("note"),
+    warnbox=document.getElementById("warnbox"),nameBox=document.getElementById("areaname"),
+    zoomSel=document.getElementById("zoom");
+
+var AREAS_KEY="field-areas-v1";
+var BYTES_PER_TILE=19000;   /* USGS topo + imagery average, measured rough */
+
+function x2(l,z){return Math.floor((l+180)/360*Math.pow(2,z));}
+function y2(l,z){var r=l*Math.PI/180;
+  return Math.floor((1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z));}
+
+function urlsFor(bbox,maxZ){
+  var out=[];
+  for(var z=11;z<=maxZ;z++){
+    for(var x=x2(bbox[0],z);x<=x2(bbox[2],z);x++)
+      for(var y=y2(bbox[3],z);y<=y2(bbox[1],z);y++){
+        out.push(BASE.topo.tiles.replace("{z}",z).replace("{x}",x).replace("{y}",y));
+        out.push(BASE.imagery.tiles.replace("{z}",z).replace("{x}",x).replace("{y}",y));
+      }
+  }
+  return out;
+}
+
+function currentBbox(){
+  var b=map.getBounds();
+  return [b.getWest(),b.getSouth(),b.getEast(),b.getNorth()];
+}
+
+function mb(n){return n<1?"under 1 MB":n<1024?n.toFixed(0)+" MB":(n/1024).toFixed(1)+" GB";}
+
+var HARD_CAP_MB=600;        /* one download should never exceed this */
+var freeMB=null;            /* what the browser says we may still store */
+
+function checkSpace(){
+  if(!(navigator.storage&&navigator.storage.estimate))return Promise.resolve(null);
+  return navigator.storage.estimate().then(function(e){
+    if(!e||!e.quota)return null;
+    freeMB=Math.max(0,(e.quota-(e.usage||0))/1048576);
+    return freeMB;
+  }).catch(function(){return null;});
+}
+
+function estimate(){
+  var n=urlsFor(currentBbox(),parseInt(zoomSel.value,10)).length;
+  var size=n*BYTES_PER_TILE/1048576;
+  document.getElementById("est-tiles").textContent=n.toLocaleString();
+  document.getElementById("est-size").textContent=mb(size);
+
+  var msg="", block=false;
+
+  if(size>HARD_CAP_MB){
+    msg="Too big to download in one go. Zoom in until this drops below "+
+        HARD_CAP_MB+" MB, or pick a lower detail level. Large areas are meant to be "+
+        "saved as several smaller pieces.";
+    block=true;
+  } else if(freeMB!==null&&size>freeMB*0.8){
+    msg="Not enough room on this phone. About "+mb(freeMB)+" is available and this "+
+        "needs "+mb(size)+". Delete a saved area below, or choose a smaller one.";
+    block=true;
+  } else if(freeMB!==null&&size>freeMB*0.5){
+    msg="This would use most of the space left for saved maps ("+mb(freeMB)+" free).";
+  } else if(size>150){
+    msg="Large download. On cellular this costs real money — do it on wifi.";
+  } else if(size>60){
+    msg="Moderate download. Best done on wifi.";
+  }
+
+  warnbox.textContent=msg;
+  warnbox.classList.toggle("on",!!msg);
+  saveBtn.disabled=block;
+  saveBtn.textContent=block?"Area too large":"Save this area";
+  return {n:n,size:size,block:block};
+}
+map.on("moveend",estimate);
+zoomSel.addEventListener("change",estimate);
+map.on("load",estimate);
+
+/* ---- saved areas ---- */
+function loadAreas(){
+  try{return JSON.parse(localStorage.getItem(AREAS_KEY))||[];}catch(e){return [];}
+}
+function storeAreas(a){
+  try{localStorage.setItem(AREAS_KEY,JSON.stringify(a));}catch(e){}
+}
+
+function describeBbox(b){
+  var midLat=(b[1]+b[3])/2;
+  var wide=(b[2]-b[0])*69*Math.cos(midLat*Math.PI/180);
+  var tall=(b[3]-b[1])*69;
+  return wide.toFixed(0)+" x "+tall.toFixed(0)+" miles";
+}
+
+function autoName(b){
+  var lat=((b[1]+b[3])/2), lon=((b[0]+b[2])/2);
+  return Math.abs(lat).toFixed(2)+(lat<0?"S":"N")+" "+
+         Math.abs(lon).toFixed(2)+(lon<0?"W":"E");
+}
+
+function renderAreas(){
+  var list=loadAreas(), el=document.getElementById("areas");
+  if(!list.length){
+    el.innerHTML='<div class="none">Nothing saved yet. Pan to an area above and save it.</div>';
+    return;
+  }
+  el.innerHTML=list.map(function(a,i){
+    return '<div class="area"><span class="txt">'+
+      '<span class="nm">'+esc(a.name)+"</span>"+
+      '<span class="sub2">'+describeBbox(a.bbox)+" &middot; "+mb(a.tiles*BYTES_PER_TILE/1048576)+
+      " &middot; saved "+new Date(a.date).toLocaleDateString()+"</span></span>"+
+      '<button data-go="'+i+'">Go</button>'+
+      '<button data-del="'+i+'">Delete</button></div>';
+  }).join("");
+
+  el.querySelectorAll("[data-go]").forEach(function(b){
+    b.onclick=function(){
+      var a=loadAreas()[+b.dataset.go];
+      map.fitBounds([[a.bbox[0],a.bbox[1]],[a.bbox[2],a.bbox[3]]],{padding:20});
+      closeSheets();
+    };
+  });
+  el.querySelectorAll("[data-del]").forEach(function(b){
+    b.onclick=function(){ removeArea(+b.dataset.del,b); };
+  });
+}
+
+function removeArea(idx,btn){
+  var list=loadAreas(), gone=list[idx];
+  if(!gone)return;
+  if(btn.dataset.sure!=="1"){
+    btn.dataset.sure="1"; btn.textContent="Sure?";
+    setTimeout(function(){ if(btn.dataset.sure==="1"){btn.dataset.sure="";btn.textContent="Delete";} },4000);
+    return;
+  }
+  btn.textContent="…";
+
+  /* Keep any tile another saved area still needs. */
+  var keep={};
+  list.forEach(function(a,i){
+    if(i===idx)return;
+    urlsFor(a.bbox,a.maxZ).forEach(function(u){keep[u]=1;});
+  });
+  var drop=urlsFor(gone.bbox,gone.maxZ).filter(function(u){return !keep[u];});
+
+  caches.open(TILE_CACHE).then(function(c){
+    return Promise.all(drop.map(function(u){return c.delete(u);}));
+  }).then(function(){
+    list.splice(idx,1); storeAreas(list); renderAreas(); usage(); checkSpace().then(estimate);
+  });
+}
+
+/* ---- saving ---- */
+saveBtn.onclick=function(){
+  if(!navigator.onLine){note.textContent="No connection. Saving needs signal.";return;}
+  var est=estimate();
+  if(est.block){toast("That area is too large to save. Zoom in and try again.");return;}
+  var bbox=currentBbox(), maxZ=parseInt(zoomSel.value,10);
+  var urls=urlsFor(bbox,maxZ);
+  var name=(nameBox.value||"").trim()||autoName(bbox);
+
+  saveBtn.disabled=true;bar.classList.add("on");
+  note.textContent='Saving "'+name+'". Keep this screen open.';
+
+  grab(urls,function(d,t){fill.style.width=(d/t*100)+"%";}).then(function(r){
+    bar.classList.remove("on");fill.style.width="0";saveBtn.disabled=false;
+    var list=loadAreas();
+    list.unshift({name:name,bbox:bbox,maxZ:maxZ,tiles:r.saved,date:Date.now()});
+    storeAreas(list); nameBox.value=""; renderAreas(); usage(); checkSpace().then(estimate);
+    note.textContent=r.failed
+      ? 'Saved "'+name+'" with '+r.failed.toLocaleString()+" tiles missing. Save again to fill the gaps."
+      : 'Saved "'+name+'". This area now works in airplane mode.';
+  });
+};
+
+function grab(urls,prog){
+  return caches.open(TILE_CACHE).then(function(c){
+    var i=0,ok=0,bad=0,n=urls.length;
+    function next(){
+      if(i>=n)return Promise.resolve();
+      var u=urls[i++];
+      return c.match(u).then(function(h){
+        if(h){ok++;return;}
+        return fetch(u,{mode:"cors"}).then(function(r){
+          if(!r.ok)throw 0;return c.put(u,r.clone());}).then(function(){ok++;})
+          .catch(function(){return fetch(u,{mode:"no-cors"}).then(function(r){return c.put(u,r);})
+            .then(function(){ok++;}).catch(function(){bad++;});});
+      }).then(function(){prog(ok+bad,n);return next();});
+    }
+    var lanes=[];for(var k=0;k<6;k++)lanes.push(next());
+    return Promise.all(lanes).then(function(){return {saved:ok,failed:bad};});
+  });
+}
+
+function usage(){
+  if(navigator.storage&&navigator.storage.estimate)
+    navigator.storage.estimate().then(function(e){
+      var used=(e.usage||0)/1048576;
+      var txt=mb(used);
+      if(e.quota) txt+=" of "+mb(e.quota/1048576)+" available";
+      document.getElementById("used").textContent=txt;
+    });
+}
+usage(); renderAreas();
+
+if("serviceWorker" in navigator)
+  addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});});
+if(navigator.storage&&navigator.storage.persist) navigator.storage.persist();
+})();
+</script>
+</body>
+</html>
