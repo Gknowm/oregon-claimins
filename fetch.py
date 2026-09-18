@@ -38,9 +38,39 @@ import urllib.request
 # add them; nothing else needs changing.
 GOLD = False
 
-# How far from a gem occurrence a claim has to be before it is dropped.
-# Bigger number, bigger file. 5 km is about 3 miles.
-CLAIM_RADIUS_KM = 5.0
+# How far from one of your anchor points a claim has to be before it is
+# dropped. 15 km is about 9 miles.
+CLAIM_RADIUS_KM = 15.0
+
+# The ground you care about. Claims are pulled around THESE points, not
+# around MILO occurrences.
+#
+# Anchoring on occurrences was a mistake: it threw away exactly the claims
+# worth seeing. An active claim with no occurrence record means somebody
+# staked ground, is paying to hold it, and nothing in any database says
+# why. Those are the interesting ones.
+#
+# Add a line for any new ground. Claims are taken whole here - BLM records
+# no commodity, so there is no way to ask for gem claims only. Keeping the
+# anchors on gem country is what keeps the gold districts out.
+ANCHORS = [
+    ( 43.99540,  -119.15870),   # Silvies 1
+    ( 45.15340,  -117.58600),   # NE Oregon 2
+    ( 44.20000,  -119.78000),   # Silvies 3
+    ( 44.23000,  -119.78000),   # Silvies 4
+    ( 44.20000,  -119.82000),   # Silvies 5
+    ( 42.67550,  -120.01200),   # Warner 6
+    ( 42.66790,  -120.00600),   # Warner 7
+    ( 43.13100,  -119.94200),   # Harney 8
+    ( 45.88333,  -116.85000),   # NE Oregon X1
+    ( 45.39460,  -117.82200),   # NE Oregon X2
+    ( 45.27800,  -117.83300),   # NE Oregon X3
+    ( 45.15600,  -117.77300),   # NE Oregon X4
+    ( 45.50820,  -117.95300),   # NE Oregon X5
+    ( 43.85650,  -119.52600),   # Ponderosa (ref)
+    ( 42.71420,  -119.86620),   # Dust Devil (ref)
+    ( 42.82440,  -119.89530),   # Plush (ref)
+]
 
 # The whole state, as west, south, east, north.
 OREGON = (-124.70, 41.90, -116.40, 46.30)
@@ -280,8 +310,9 @@ def main():
 
     os.makedirs(DATA, exist_ok=True)
     print("Oregon, whole state.")
-    print(f"Gold and metals: {'included' if GOLD else 'left out'}")
-    print(f"Claims kept within {CLAIM_RADIUS_KM:g} km of an occurrence.\n")
+    print(f"Occurrences: gem categories{' plus gold and metals' if GOLD else ' only'}, statewide.")
+    print(f"Claims: everything within {CLAIM_RADIUS_KM:g} km of your "
+          f"{len(ANCHORS)} anchor points.\n")
 
     print("Map library")
     vendor()
@@ -330,17 +361,15 @@ def main():
     for c in sorted(tally, key=lambda k: -tally[k]):
         print(f"      {c:<12} {tally[c]:,}")
 
-    if not kept:
-        print("\n    Nothing kept, so there is no anchor for the claims. Stopping.")
-        return 1
-
-    # ---- claims near those occurrences --------------------------------
-    anchors = [c for c in (centroid(f["geometry"]) for f in kept) if c]
+    # ---- claims around YOUR anchors, not around the occurrences -------
+    anchors = [(lon, lat) for lat, lon in ANCHORS]
     boxes = cells_around(anchors, CLAIM_RADIUS_KM)
 
     print(f"\nMining claims")
     print(f"  BLM Mineral and Land Records System, cases not closed")
-    print(f"  {len(anchors):,} occurrences group into {len(boxes)} areas to ask about.")
+    print(f"  Every claim within {CLAIM_RADIUS_KM:g} km of your {len(anchors)} "
+          f"anchor points, whatever it is staked for.")
+    print(f"  Those group into {len(boxes)} areas to ask about.")
 
     seen = {}
     failed = 0

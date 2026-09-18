@@ -203,12 +203,7 @@
   <div id="grip" aria-hidden="true"><span></span></div>
   <button class="close" data-close="sheet-layers" aria-label="Close">✕</button>
   <h2>Layers</h2>
-  <p class="lede">Gem occurrences statewide, and the claims that sit near them. Saved on the phone.</p>
-
-  <div class="seg" role="group" aria-label="Basemap">
-    <button id="bm-topo" aria-pressed="true">Topo</button>
-    <button id="bm-imagery" aria-pressed="false">Imagery</button>
-  </div>
+  <p class="lede">Every claim around your ground, with gem occurrences statewide for reference. Saved on the phone.</p>
 
 
   <div class="layer">
@@ -289,7 +284,7 @@
 
   <button id="save">Save this area</button>
   <div id="bar"><div id="fill"></div></div>
-  <p id="note">Layer data is already on the phone. This saves the topo and imagery underneath it. Save small areas — the whole state will not fit.</p>
+  <p id="note">Layer data is already on the phone. This saves the topo underneath it. Save small areas — the whole state will not fit.</p>
 
   <h2 style="padding-top:26px">Saved areas</h2>
   <p class="lede">Storage used: <span id="used">—</span></p>
@@ -311,8 +306,6 @@ var TILE_CACHE="oregon-tiles-v1";
 
 var BASE={
   topo:{tiles:"https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}",
-        attr:"USGS The National Map"},
-  imagery:{tiles:"https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/{z}/{y}/{x}",
         attr:"USGS The National Map"}
 };
 
@@ -602,7 +595,7 @@ function claimPopup(p){
 
 /* DOGAMI groups occurrences by Type. Their own legend colours are pale
    pastels meant for a white background, so these are darkened versions that
-   stay legible on topo and imagery. */
+   stay legible on the topo basemap. */
 var CAT_COLOR={
   gold:"#E8A200", silver:"#98A6B4", metal:"#7C5CA8",
   sunstone:"#C1520F", opal:"#D4569B", agate:"#2E8B8B",
@@ -1118,15 +1111,6 @@ LAYERS.forEach(function(L){
 });
 
 
-/* ---------- basemap ---------- */
-function setBase(k){
-  map.getSource("base").setTiles([BASE[k].tiles]);
-  document.getElementById("bm-topo").setAttribute("aria-pressed",String(k==="topo"));
-  document.getElementById("bm-imagery").setAttribute("aria-pressed",String(k==="imagery"));
-}
-document.getElementById("bm-topo").onclick=function(){setBase("topo");};
-document.getElementById("bm-imagery").onclick=function(){setBase("imagery");};
-
 /* ---------- sheets ---------- */
 function openSheet(){
   document.getElementById("sheet-layers").classList.add("open");
@@ -1195,7 +1179,7 @@ var saveBtn=document.getElementById("save"),bar=document.getElementById("bar"),
     zoomSel=document.getElementById("zoom");
 
 var AREAS_KEY="field-areas-v1";
-var BYTES_PER_TILE=19000;   /* USGS topo + imagery average, measured rough */
+var BYTES_PER_TILE=19000;   /* USGS topo average, measured rough */
 
 function x2(l,z){return Math.floor((l+180)/360*Math.pow(2,z));}
 function y2(l,z){var r=l*Math.PI/180;
@@ -1207,7 +1191,6 @@ function urlsFor(bbox,maxZ){
     for(var x=x2(bbox[0],z);x<=x2(bbox[2],z);x++)
       for(var y=y2(bbox[3],z);y<=y2(bbox[1],z);y++){
         out.push(BASE.topo.tiles.replace("{z}",z).replace("{x}",x).replace("{y}",y));
-        out.push(BASE.imagery.tiles.replace("{z}",z).replace("{x}",x).replace("{y}",y));
       }
   }
   return out;
