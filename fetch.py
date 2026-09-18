@@ -59,8 +59,10 @@ VENDOR_FILES = [
      "maplibre-gl.css"),
 ]
 
+# MILO release 4 (24,664 records statewide, and it carries DOGAMI's own
+# assay results). Release 3 lived at Public/MILOv3/MapServer/1.
 MILO_URL = ("https://gis.dogami.oregon.gov/arcgis/rest/services/"
-            "Public/MILOv3/MapServer/1/query")
+            "Public/MILO/MapServer/1/query")
 CLAIMS_URL = ("https://gis.blm.gov/nlsdb/rest/services/HUB/"
               "BLM_Natl_MLRS_Mining_Claims_Not_Closed/FeatureServer/0/query")
 
@@ -304,6 +306,16 @@ def main():
         f["properties"]["_cat"] = cat
         f["properties"]["_grp"] = grp
         kept.append(f)
+
+    # If MILO-4 renamed its fields, the allow-list above would quietly throw
+    # everything away. Say so rather than writing a file full of empty records.
+    if kept:
+        avg = sum(len(f["properties"]) for f in kept) / len(kept)
+        if avg < 4:
+            print("    WARNING: records are coming through nearly empty, so the")
+            print("    field names in MILO_KEEP probably changed in release 4.")
+            print("    Open the service in a browser to see the current names:")
+            print("    " + MILO_URL.replace("/query", "?f=pjson"))
 
     path = os.path.join(DATA, "milo.geojson")
     with open(path, "w") as fh:
