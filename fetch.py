@@ -4,26 +4,34 @@ Fills in everything the Oregon map needs. Run it once:
 
     python3 fetch.py
 
-Two layers only, statewide:
+Covers east of the Cascade crest. Two layers:
 
-  1. Gem and rockhounding occurrences from DOGAMI MILO, whole state.
-  2. BLM mining claims, but ONLY the ones within 5 km of one of those
-     occurrences. Statewide claims would be 10-30 MB and most of it is
-     gold country you have no reason to look at. This keeps the file
-     small and keeps every claim that could actually matter to you.
+  1. Gem and rockhounding occurrences from DOGAMI MILO release 4.
+     Filtered to gem categories - no metals, no gravel, no coal.
+     That filter is real: MILO records a commodity.
+
+  2. BLM mining claims. Every claim in the box, unfiltered.
+     There is no commodity filter here and there cannot be one. BLM
+     records no commodity for a claim, so any "gem claims only" rule
+     would be a geographic guess wearing a filter's clothes. What is
+     in the box is in the file; if a claim is missing, it is outside
+     the box, and that is the only reason.
+
+To read commodity onto a claim, look at the gem occurrences sitting on
+or beside it. The map tallies those in the claim popup.
 
 To check the sources are alive without downloading anything:
 
     python3 fetch.py --check
 
-To add gold claims and mines later, set GOLD = True below and run it
-again. The map already knows how to draw them.
+To add gold and other metal occurrences later, set GOLD = True below.
+That affects MILO only - claims are already unfiltered. The map has the
+Metals layer built in and empty until then.
 
 Needs Python 3.8 or newer. No extra packages.
 """
 
 import json
-import math
 import os
 import ssl
 import sys
@@ -38,42 +46,10 @@ import urllib.request
 # add them; nothing else needs changing.
 GOLD = False
 
-# How far from one of your anchor points a claim has to be before it is
-# dropped. 15 km is about 9 miles.
-CLAIM_RADIUS_KM = 15.0
-
-# The ground you care about. Claims are pulled around THESE points, not
-# around MILO occurrences.
-#
-# Anchoring on occurrences was a mistake: it threw away exactly the claims
-# worth seeing. An active claim with no occurrence record means somebody
-# staked ground, is paying to hold it, and nothing in any database says
-# why. Those are the interesting ones.
-#
-# Add a line for any new ground. Claims are taken whole here - BLM records
-# no commodity, so there is no way to ask for gem claims only. Keeping the
-# anchors on gem country is what keeps the gold districts out.
-ANCHORS = [
-    ( 43.99540,  -119.15870),   # Silvies 1
-    ( 45.15340,  -117.58600),   # NE Oregon 2
-    ( 44.20000,  -119.78000),   # Silvies 3
-    ( 44.23000,  -119.78000),   # Silvies 4
-    ( 44.20000,  -119.82000),   # Silvies 5
-    ( 42.67550,  -120.01200),   # Warner 6
-    ( 42.66790,  -120.00600),   # Warner 7
-    ( 43.13100,  -119.94200),   # Harney 8
-    ( 45.88333,  -116.85000),   # NE Oregon X1
-    ( 45.39460,  -117.82200),   # NE Oregon X2
-    ( 45.27800,  -117.83300),   # NE Oregon X3
-    ( 45.15600,  -117.77300),   # NE Oregon X4
-    ( 45.50820,  -117.95300),   # NE Oregon X5
-    ( 43.85650,  -119.52600),   # Ponderosa (ref)
-    ( 42.71420,  -119.86620),   # Dust Devil (ref)
-    ( 42.82440,  -119.89530),   # Plush (ref)
-]
-
-# The whole state, as west, south, east, north.
-OREGON = (-124.70, 41.90, -116.40, 46.30)
+# The ground to pull, as west, south, east, north.
+# East of the Cascade crest. Leaves out the Josephine/Jackson gold
+# districts in the southwest, which are the claim-densest in Oregon.
+BBOX = (-121.80, 41.90, -116.40, 46.30)
 
 # ----------------------------------------------------------------------
 
@@ -199,6 +175,11 @@ def query(url, bbox, page=1000, label=""):
             "outSR": "4326",
             "resultOffset": offset,
             "resultRecordCount": page,
+            # Paging with resultOffset is only stable if the server sorts
+            # rows the same way every request. With no explicit order the
+            # sort is undefined, so pages can overlap and records fall
+            # between them - they simply never arrive, with no error.
+            "orderByFields": "OBJECTID",
             "geometry": ",".join(str(v) for v in bbox),
             "geometryType": "esriGeometryEnvelope",
             "inSR": "4326",
@@ -224,53 +205,6 @@ def query(url, bbox, page=1000, label=""):
         sys.stdout.write("\r" + " " * 50 + "\r")
     return features
 
-
-def centroid(geom):
-    """Rough centre of any geometry. Good enough for a distance screen."""
-    xs, ys = [], []
-
-    def walk(node):
-        if isinstance(node, list):
-            if node and isinstance(node[0], (int, float)):
-                xs.append(node[0])
-                ys.append(node[1])
-            else:
-                for v in node:
-                    walk(v)
-    walk((geom or {}).get("coordinates"))
-    if not xs:
-        return None
-    return (sum(xs) / len(xs), sum(ys) / len(ys))
-
-
-def km_apart(lon1, lat1, lon2, lat2):
-    R = 6371.0
-    p = math.radians
-    a = (math.sin(p(lat2 - lat1) / 2) ** 2 +
-         math.cos(p(lat1)) * math.cos(p(lat2)) * math.sin(p(lon2 - lon1) / 2) ** 2)
-    return 2 * R * math.asin(math.sqrt(a))
-
-
-def cells_around(points, radius_km, cell_deg=0.25):
-    """Group occurrence points into a handful of boxes to query.
-
-    One query per occurrence would be hundreds of round trips. Snapping
-    them to a coarse grid first cuts that to a few dozen.
-    """
-    buckets = {}
-    for lon, lat in points:
-        key = (round(lon / cell_deg), round(lat / cell_deg))
-        buckets.setdefault(key, []).append((lon, lat))
-    boxes = []
-    for pts in buckets.values():
-        lons = [p[0] for p in pts]
-        lats = [p[1] for p in pts]
-        mid_lat = sum(lats) / len(lats)
-        dlat = radius_km / 111.32
-        dlon = radius_km / (111.32 * max(math.cos(math.radians(mid_lat)), 0.1))
-        boxes.append((min(lons) - dlon, min(lats) - dlat,
-                      max(lons) + dlon, max(lats) + dlat))
-    return boxes
 
 
 def check():
@@ -312,10 +246,9 @@ def main():
         return check()
 
     os.makedirs(DATA, exist_ok=True)
-    print("Oregon, whole state.")
-    print(f"Occurrences: gem categories{' plus gold and metals' if GOLD else ' only'}, statewide.")
-    print(f"Claims: everything within {CLAIM_RADIUS_KM:g} km of your "
-          f"{len(ANCHORS)} anchor points.\n")
+    print(f"Box: {BBOX}")
+    print(f"Occurrences: gem categories{' plus gold and metals' if GOLD else ' only'}.")
+    print("Claims: everything in the box, unfiltered.\n")
 
     print("Map library")
     vendor()
@@ -324,7 +257,7 @@ def main():
     print("\nMineral occurrences")
     print("  Oregon DOGAMI, Mineral Information Layer (MILO)")
     try:
-        raw = query(MILO_URL, OREGON, 1000, "MILO")
+        raw = query(MILO_URL, BBOX, 1000, "MILO")
     except Exception as exc:
         print(f"    could not download: {exc}")
         print("    Run  python3 fetch.py --check  to see if the source is down.")
@@ -354,7 +287,7 @@ def main():
     path = os.path.join(DATA, "milo.geojson")
     with open(path, "w") as fh:
         json.dump({"type": "FeatureCollection", "features": kept}, fh)
-    print(f"    {len(raw):,} statewide records -> {len(kept):,} kept, "
+    print(f"    {len(raw):,} records in box -> {len(kept):,} kept, "
           f"{os.path.getsize(path)/1048576:.1f} MB")
 
     tally = {}
@@ -364,49 +297,24 @@ def main():
     for c in sorted(tally, key=lambda k: -tally[k]):
         print(f"      {c:<12} {tally[c]:,}")
 
-    # ---- claims around YOUR anchors, not around the occurrences -------
-    anchors = [(lon, lat) for lat, lon in ANCHORS]
-    boxes = cells_around(anchors, CLAIM_RADIUS_KM)
-
-    print(f"\nMining claims")
-    print(f"  BLM Mineral and Land Records System, cases not closed")
-    print(f"  Every claim within {CLAIM_RADIUS_KM:g} km of your {len(anchors)} "
-          f"anchor points, whatever it is staked for.")
-    print(f"  Those group into {len(boxes)} areas to ask about.")
-
-    seen = {}
-    failed = 0
-    for n, box in enumerate(boxes, 1):
-        before = len(seen)
-        try:
-            for f in query(CLAIMS_URL, box, 1000):
-                f = slim(f, set(CLAIMS_KEEP))
-                key = f["properties"].get("OBJECTID") or json.dumps(f["geometry"])
-                seen[key] = f
-        except Exception as exc:
-            failed += 1
-            print(f"\r    area {n} FAILED: {exc}" + " " * 20)
-        else:
-            got = len(seen) - before
-            print(f"\r    area {n:>2} of {len(boxes)}: {got:,} claims"
-                  f"   ({box[1]:.2f},{box[0]:.2f}) to ({box[3]:.2f},{box[2]:.2f})")
-
-    # the box is square, the radius is round — trim the corners
-    near = []
-    for f in seen.values():
-        c = centroid(f["geometry"])
-        if not c:
-            continue
-        if any(km_apart(c[0], c[1], a[0], a[1]) <= CLAIM_RADIUS_KM for a in anchors):
-            near.append(f)
+    # ---- claims: everything in the box ------------------------------
+    # No filter. Not by commodity (BLM records none), not by distance to
+    # anything. What is in the box is in the file. If a claim is missing
+    # it is because it is outside the box, and nothing else.
+    print("\nMining claims")
+    print("  BLM Mineral and Land Records System, cases not closed")
+    print("  Every claim in the box, whatever it is staked for.")
+    try:
+        raw = query(CLAIMS_URL, BBOX, 1000, "claims")
+    except Exception as exc:
+        print(f"    could not download: {exc}")
+        return 1
+    claims = [slim(f, set(CLAIMS_KEEP)) for f in raw]
 
     path = os.path.join(DATA, "claims.geojson")
     with open(path, "w") as fh:
-        json.dump({"type": "FeatureCollection", "features": near}, fh)
-    print(f"    {len(seen):,} found in those areas -> {len(near):,} within "
-          f"{CLAIM_RADIUS_KM:g} km, {os.path.getsize(path)/1048576:.1f} MB")
-    if failed:
-        print(f"    {failed} area(s) failed to download. Run again to fill them in.")
+        json.dump({"type": "FeatureCollection", "features": claims}, fh)
+    print(f"    {len(claims):,} claims, {os.path.getsize(path)/1048576:.1f} MB")
 
     total = sum(os.path.getsize(os.path.join(DATA, f)) for f in os.listdir(DATA))
     print(f"\nData total: {total/1048576:.1f} MB")

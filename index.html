@@ -203,7 +203,7 @@
   <div id="grip" aria-hidden="true"><span></span></div>
   <button class="close" data-close="sheet-layers" aria-label="Close">✕</button>
   <h2>Layers</h2>
-  <p class="lede">Every claim around your ground, with gem occurrences statewide for reference. Saved on the phone.</p>
+  <p class="lede">Every claim east of the Cascades, with gem occurrences for reference. Saved on the phone.</p>
 
 
   <div class="layer">
@@ -301,7 +301,7 @@
    START VIEW — nudge these if the map opens somewhere odd.
    Opens on the whole state. Zoom to the ground you want.
    ============================================================ */
-var START=[-120.40,43.90], START_Z=6;
+var START=[-119.60,43.60], START_Z=7;
 var TILE_CACHE="oregon-tiles-v1";
 
 var BASE={
@@ -836,6 +836,19 @@ function markMissing(L){
    covers substantially the same ground. Those draw green, so a block holding
    both reads at a glance. Compared by bounding box, which is right for the
    survey-grid rectangles BLM hands back. */
+/* Bounding box of any geometry, as [w,s,e,n]. */
+function bboxOf(g){
+  if(!g||!g.coordinates)return null;
+  var b=[Infinity,Infinity,-Infinity,-Infinity];
+  (function walk(c){
+    if(typeof c[0]==="number"){
+      if(c[0]<b[0])b[0]=c[0]; if(c[1]<b[1])b[1]=c[1];
+      if(c[0]>b[2])b[2]=c[0]; if(c[1]>b[3])b[3]=c[1];
+    } else c.forEach(walk);
+  })(g.coordinates);
+  return isFinite(b[0])?b:null;
+}
+
 /* Ray casting: is this point inside this ring? */
 function inRing(pt,ring){
   var x=pt[0],y=pt[1],hit=false;
@@ -866,9 +879,28 @@ function crossReference(claims,milo){
   }).filter(Boolean);
   if(!pts.length)return;
 
+  /* Bucket the points on a coarse grid. Statewide MILO is thousands of
+     points; testing every one against every claim is a product big enough
+     to lock the page. A claim only needs the points near it. */
+  var CELL=0.05, grid={};
+  pts.forEach(function(p){
+    var k=Math.floor(p.c[0]/CELL)+":"+Math.floor(p.c[1]/CELL);
+    (grid[k]||(grid[k]=[])).push(p);
+  });
+  function ptsNear(g){
+    var b=bboxOf(g); if(!b)return [];
+    var out=[],seen={};
+    for(var x=Math.floor(b[0]/CELL);x<=Math.floor(b[2]/CELL);x++)
+      for(var y=Math.floor(b[1]/CELL);y<=Math.floor(b[3]/CELL);y++){
+        var k=x+":"+y;
+        if(grid[k]&&!seen[k]){seen[k]=1;out=out.concat(grid[k]);}
+      }
+    return out;
+  }
+
   (claims.features||[]).forEach(function(cf){
     var tally={};
-    pts.forEach(function(p){
+    ptsNear(cf.geometry).forEach(function(p){
       if(inGeom(p.c,cf.geometry)){
         var k=String(p.com).trim();
         tally[k]=(tally[k]||0)+1;
@@ -912,15 +944,28 @@ function markMixedClaims(geoj){
     return small>0 ? (w*h)/small : 0;
   }
 
-  for(var i=0;i<items.length;i++){
-    for(var j=i+1;j<items.length;j++){
-      if(items[i].kind===items[j].kind)continue;
-      if(overlapFrac(items[i].b,items[j].b)>0.35){
-        items[i].f.properties._mix=1;
-        items[j].f.properties._mix=1;
+  /* Only claims that share a grid cell can overlap, so compare within
+     cells rather than sweeping every pair. The old all-pairs loop was
+     fine for a few hundred claims and unusable for thousands. */
+  var CELL2=0.02, cells={};
+  items.forEach(function(it,idx){
+    for(var x=Math.floor(it.b[0]/CELL2);x<=Math.floor(it.b[2]/CELL2);x++)
+      for(var y=Math.floor(it.b[1]/CELL2);y<=Math.floor(it.b[3]/CELL2);y++){
+        var k=x+":"+y;
+        (cells[k]||(cells[k]=[])).push(idx);
       }
-    }
-  }
+  });
+  Object.keys(cells).forEach(function(k){
+    var ids=cells[k];
+    for(var i=0;i<ids.length;i++)
+      for(var j=i+1;j<ids.length;j++){
+        var A=items[ids[i]],B=items[ids[j]];
+        if(A.kind===B.kind)continue;
+        if(overlapFrac(A.b,B.b)>0.35){
+          A.f.properties._mix=1; B.f.properties._mix=1;
+        }
+      }
+  });
   return geoj;
 }
 
