@@ -212,9 +212,12 @@ def query(url, bbox, page=1000, label=""):
         if label:
             sys.stdout.write(f"\r    {label} {len(features):,} features…")
             sys.stdout.flush()
-        if len(batch) < page:
+        # Advance by what actually came back, not by what we asked for. The
+        # server may cap the page size well below `page`; trusting our own
+        # number here silently loses every record past the first page.
+        if not batch:
             break
-        offset += page
+        offset += len(batch)
         if offset > 300000:
             break
     if label:
@@ -374,16 +377,19 @@ def main():
     seen = {}
     failed = 0
     for n, box in enumerate(boxes, 1):
-        sys.stdout.write(f"\r    area {n} of {len(boxes)}, {len(seen):,} claims so far…")
-        sys.stdout.flush()
+        before = len(seen)
         try:
-            for f in query(CLAIMS_URL, box, 2000):
+            for f in query(CLAIMS_URL, box, 1000):
                 f = slim(f, set(CLAIMS_KEEP))
                 key = f["properties"].get("OBJECTID") or json.dumps(f["geometry"])
                 seen[key] = f
-        except Exception:
+        except Exception as exc:
             failed += 1
-    sys.stdout.write("\r" + " " * 60 + "\r")
+            print(f"\r    area {n} FAILED: {exc}" + " " * 20)
+        else:
+            got = len(seen) - before
+            print(f"\r    area {n:>2} of {len(boxes)}: {got:,} claims"
+                  f"   ({box[1]:.2f},{box[0]:.2f}) to ({box[3]:.2f},{box[2]:.2f})")
 
     # the box is square, the radius is round — trim the corners
     near = []
