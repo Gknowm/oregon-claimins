@@ -258,6 +258,13 @@
     <span class="sw"><input type="checkbox" id="ck-wp" checked><i></i></span>
   </div>
 
+  <h2 class="sec">Go to a coordinate</h2>
+  <p class="lede">Paste a latitude and longitude, like 42.83, -119.89.</p>
+  <label class="field" for="gotoll">Latitude, longitude
+    <input type="text" id="gotoll" placeholder="42.83, -119.89" autocomplete="off">
+  </label>
+  <button id="gobtn">Go there</button>
+
   <h2 class="sec">My points</h2>
   <p class="lede">Press and hold anywhere on the map to drop a point. Saved on this phone only.</p>
   <div id="wplist"></div>
@@ -316,6 +323,10 @@ var BASE={
 var map=new maplibregl.Map({
   container:"map",
   style:{version:8,
+    /* Without "glyphs" MapLibre rejects every symbol layer outright, so no
+       label of any kind renders - claim names, site names, waypoint names.
+       Needs signal; offline the labels simply do not draw, same as before. */
+    glyphs:"https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
     sources:{base:{type:"raster",tiles:[BASE.topo.tiles],tileSize:256,maxzoom:16,attribution:BASE.topo.attr}},
     layers:[{id:"base",type:"raster",source:"base"}]},
   center:START,zoom:START_Z,maxZoom:17,
@@ -704,7 +715,7 @@ map.on("load",function(){
   map.addLayer({id:"wp-label",type:"symbol",source:"wp",minzoom:11,
     layout:{"text-field":["get","name"],"text-size":13.5,"text-offset":[0,1.15],
             "text-anchor":"top","text-allow-overlap":false,
-            "text-font":["Open Sans Bold","Arial Unicode MS Bold"]},
+            "text-font":["Noto Sans Bold"]},
     paint:{"text-color":"#4A1502","text-halo-color":"#FFFFFF","text-halo-width":2.2}});
   wpRefresh();
 
@@ -727,7 +738,13 @@ map.on("load",function(){
         n=g.features.filter(function(f){return f.properties&&f.properties._grp===want;}).length;
       }
       document.getElementById(L.src).textContent=n.toLocaleString()+" recorded";
-    }).catch(function(){markMissing(L);});
+    }).catch(function(err){
+      /* This used to swallow everything. One thrown error anywhere above
+         marked the layer unavailable with no trace, so a layer with
+         perfectly good data would simply never appear. */
+      console.error("layer failed:",L.id,err);
+      markMissing(L);
+    });
   });
 });
 
@@ -969,31 +986,47 @@ function markMixedClaims(geoj){
   return geoj;
 }
 
+/* addLayer throws on an invalid layer. A label layer failing - which it will
+   wherever glyphs cannot be reached - must not stop the claim outlines from
+   being added, and must not bubble into the loader's catch, where it would
+   silently mark the whole layer unavailable. */
+function addLayerSafe(spec){
+  try{ map.addLayer(spec); }
+  catch(e){ console.warn("layer skipped:",spec.id,e&&e.message); }
+}
+
 function build(L,geoj){
-  if(!map.getSource(L.id))map.addSource(L.id,{type:"geojson",data:geoj});
+  /* tolerance:0 matters. MapLibre defaults GeoJSON sources to 0.375, which
+     simplifies geometry while building its internal tiles. A mining claim is
+     a rectangle about 400 m across - under one pixel below roughly zoom 11 -
+     so the default quietly deletes isolated claims at low zoom while dense
+     overlapping blocks survive. That is not a data problem and no amount of
+     refetching fixes it. maxzoom:16 keeps detail at the top end. */
+  if(!map.getSource(L.id))map.addSource(L.id,{type:"geojson",data:geoj,
+    tolerance:0, buffer:64, maxzoom:16});
   var vis=L.defaultOn?"visible":"none";
 
   if(L.custom){
-    map.addLayer({id:L.id+"-f",type:"circle",source:L.id,layout:{visibility:vis},
+    addLayerSafe({id:L.id+"-f",type:"circle",source:L.id,layout:{visibility:vis},
       filter:["==",["geometry-type"],"Point"],
       paint:{"circle-radius":11,
              "circle-color":["case",["==",["get","status"],"known deposit"],"#5C5548","#E5007D"],
              "circle-stroke-width":2.2,"circle-stroke-color":"#FFFFFF"}});
-    map.addLayer({id:L.id+"-l",type:"line",source:L.id,layout:{visibility:vis},
+    addLayerSafe({id:L.id+"-l",type:"line",source:L.id,layout:{visibility:vis},
       filter:["!=",["geometry-type"],"Point"],
       paint:{"line-color":"#E5007D","line-width":2}});
     /* short labels — a rank number — sit inside the dot and never hide */
-    map.addLayer({id:L.id+"-t",type:"symbol",source:L.id,
+    addLayerSafe({id:L.id+"-t",type:"symbol",source:L.id,
       filter:["all",["==",["geometry-type"],"Point"],
               ["<=",["length",["coalesce",["get","label"],["get","name"],""]],3]],
       layout:{visibility:vis,
         "text-field":["coalesce",["get","label"],["get","name"],""],
         "text-size":13,"text-anchor":"center","text-allow-overlap":true,
         "text-ignore-placement":true,
-        "text-font":["Open Sans Bold","Arial Unicode MS Bold"]},
+        "text-font":["Noto Sans Bold"]},
       paint:{"text-color":"#FFFFFF"}});
     /* anything longer is written beside the dot instead */
-    map.addLayer({id:L.id+"-t2",type:"symbol",source:L.id,minzoom:10,
+    addLayerSafe({id:L.id+"-t2",type:"symbol",source:L.id,minzoom:10,
       filter:[">",["length",["coalesce",["get","label"],["get","name"],""]],3],
       layout:{visibility:vis,
         "text-field":["coalesce",["get","label"],["get","name"],""],
@@ -1016,27 +1049,27 @@ function build(L,geoj){
       paint:{"text-color":"#2E2A20","text-halo-color":"rgba(255,255,255,.95)",
              "text-halo-width":1.7}};
     if(L.filter){dot.filter=L.filter;lbl.filter=L.filter;}
-    map.addLayer(dot); map.addLayer(lbl);
+    addLayerSafe(dot); addLayerSafe(lbl);
     return;
   }
 
   if(L.opacity>0&&L.fill){
-    map.addLayer({id:L.id+"-f",type:"fill",source:L.id,layout:{visibility:vis},
+    addLayerSafe({id:L.id+"-f",type:"fill",source:L.id,layout:{visibility:vis},
       paint:{"fill-color":L.fill(),"fill-opacity":L.opacity}});
   } else if(L.hitFill){
     /* invisible fill so the whole claim block is tappable, not just its edge */
-    map.addLayer({id:L.id+"-f",type:"fill",source:L.id,layout:{visibility:vis},
+    addLayerSafe({id:L.id+"-f",type:"fill",source:L.id,layout:{visibility:vis},
       paint:{"fill-color":"#000","fill-opacity":0.01}});
   }
 
-  map.addLayer({id:L.id+"-l",type:"line",source:L.id,layout:{visibility:vis},
+  addLayerSafe({id:L.id+"-l",type:"line",source:L.id,layout:{visibility:vis},
     paint:Object.assign({
       "line-color":typeof L.line==="function"?L.line():L.line,
       "line-width":L.lineWidth||1
     },L.dash?{"line-dasharray":L.dash}:{})});
 
   if(L.label){
-    map.addLayer({id:L.id+"-t",type:"symbol",source:L.id,minzoom:13,
+    addLayerSafe({id:L.id+"-t",type:"symbol",source:L.id,minzoom:13,
       layout:{visibility:vis,"text-field":L.label,"text-size":12,"text-allow-overlap":false},
       paint:{"text-color":"#2C1A12","text-halo-color":"rgba(242,237,226,.92)","text-halo-width":1.6}});
   }
@@ -1155,6 +1188,18 @@ LAYERS.forEach(function(L){
   }
 });
 
+
+/* ---------- go to a coordinate ---------- */
+document.getElementById("gobtn").onclick=function(){
+  var raw=document.getElementById("gotoll").value.trim();
+  var m=raw.match(/(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)/);
+  if(!m){toast("Could not read that. Try 42.83, -119.89");return;}
+  var lat=parseFloat(m[1]), lon=parseFloat(m[2]);
+  if(Math.abs(lat)>90||Math.abs(lon)>180){toast("Out of range");return;}
+  closeSheets();
+  map.easeTo({center:[lon,lat],zoom:14});
+  toast(lat.toFixed(4)+", "+lon.toFixed(4));
+};
 
 /* ---------- sheets ---------- */
 function openSheet(){
