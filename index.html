@@ -203,20 +203,35 @@
   <div id="grip" aria-hidden="true"><span></span></div>
   <button class="close" data-close="sheet-layers" aria-label="Close">✕</button>
   <h2>Layers</h2>
-  <p class="lede">Every claim east of the Cascades, with gem occurrences for reference. Saved on the phone.</p>
-
+  <p class="lede">Statewide, coast to Idaho. Saved on the phone.</p>
 
   <div class="layer">
-    <span class="swatch" style="background:linear-gradient(135deg,#2C6FB5 0 33%,#2E8B4A 33% 66%,#F2B01E 66%)"></span>
+    <span class="swatch" style="background:linear-gradient(135deg,#8C340E,#D6BC65)"></span>
+    <span class="txt"><span class="nm">Productive geology</span>
+      <span class="src" id="src-geology">DOGAMI OGDC-6</span></span>
+    <span class="sw"><input type="checkbox" id="ck-geology" checked><i></i></span>
+  </div>
+  <div class="sub">
+    <label for="op-geology">Fill strength</label>
+    <input type="range" id="op-geology" min="0" max="80" value="35">
+  </div>
+  <div id="legend"></div>
+
+  <div class="layer">
+    <span class="swatch" style="background:rgba(180,83,10,.25);border:1.5px solid #8A6A3A"></span>
     <span class="txt"><span class="nm">Mining claims</span><span class="src" id="src-claims">BLM MLRS, not closed</span></span>
     <span class="sw"><input type="checkbox" id="ck-claims" checked><i></i></span>
+  </div>
+  <div class="sub">
+    <label for="op-claims">Fill strength — kept low so the geology shows through</label>
+    <input type="range" id="op-claims" min="0" max="60" value="7">
   </div>
 
 
   <div class="layer">
     <span class="swatch" style="background:linear-gradient(135deg,#E8A200 0 50%,#98A6B4 50%)"></span>
     <span class="txt"><span class="nm">Metals</span><span class="src" id="src-milometal">DOGAMI MILO</span></span>
-    <span class="sw"><input type="checkbox" id="ck-milometal" checked><i></i></span>
+    <span class="sw"><input type="checkbox" id="ck-milometal"><i></i></span>
   </div>
   <div class="sub" style="padding-bottom:12px">
     <div class="kk"><b style="background:#E8A200"></b>Gold</div>
@@ -224,19 +239,43 @@
     <div class="kk"><b style="background:#7C5CA8"></b>Other metal</div>
   </div>
 
+  <!-- One row per gem category, built by the script from GEMS. -->
+  <h2 class="sec" style="padding-top:22px">Gems</h2>
+  <p class="lede">Each one switches on its own. The count beside a name is
+    what is actually in the data for that category — if it reads zero, the
+    dataset has no records of it, not that they are hidden.</p>
+  <div id="gemrows"></div>
+
+  <button class="impbtn" id="rare-toggle" type="button"
+          aria-expanded="false" style="margin-top:12px">Rare finds ▾</button>
+  <div id="gemrows-rare" hidden></div>
+
+  <div class="layer" style="margin-top:14px">
+    <span class="swatch" style="background:linear-gradient(135deg,#2E8B8B,#C1520F)"></span>
+    <span class="txt"><span class="nm">All gems</span>
+      <span class="src">Turn every category above on or off</span></span>
+    <span class="sw"><input type="checkbox" id="ck-allgems" checked><i></i></span>
+  </div>
+
   <div class="layer">
-    <span class="swatch" style="background:linear-gradient(135deg,#C1520F 0 33%,#2E8B8B 33% 66%,#D4569B 66%)"></span>
-    <span class="txt"><span class="nm">Gems and rockhounding</span><span class="src" id="src-milogem">DOGAMI MILO</span></span>
-    <span class="sw"><input type="checkbox" id="ck-milogem" checked><i></i></span>
+    <span class="swatch" style="background:linear-gradient(135deg,#F2B01E,#8A9A3B)"></span>
+    <span class="txt"><span class="nm">Field sites</span>
+      <span class="src" id="src-rh">Your rockhounding file</span></span>
+    <span class="sw"><input type="checkbox" id="ck-rh" checked><i></i></span>
   </div>
   <div class="sub" style="padding-bottom:14px">
-    <div class="kk"><b style="background:#C1520F"></b>Sunstone</div>
-    <div class="kk"><b style="background:#2E8B8B"></b>Agate / jasper</div>
-    <div class="kk"><b style="background:#D4569B"></b>Opal</div>
-    <div class="kk"><b style="background:#6B4423"></b>Petrified wood</div>
-    <div class="kk"><b style="background:#4A6FC4"></b>Thunderegg / crystal</div>
-    <div class="kk"><b style="background:#22222A"></b>Obsidian</div>
-    <div class="kk"><b style="background:#8A9A3B"></b>Other gem</div>
+    <p class="lede" style="padding:0 0 10px;margin:0">Tap a site to mark it.
+      Duds disappear, favourites grow a white ring, visited sites dim.
+      Marks are kept on this phone and never touch the data file.</p>
+    <div class="layer" style="border:0;padding:0 0 10px">
+      <span class="txt"><span class="nm" style="font-size:14px">Show hidden duds</span></span>
+      <span class="sw"><input type="checkbox" id="ck-duds"><i></i></span>
+    </div>
+    <button class="impbtn" id="marks-export" type="button">Save my marks…</button>
+    <button class="impbtn" id="marks-import" type="button">Restore marks…</button>
+    <input type="file" id="marks-file" accept=".json,application/json" style="display:none">
+    <p class="lede" style="padding:8px 0 0;margin:0">Clearing Safari&rsquo;s website
+      data wipes marks. Save them now and again.</p>
   </div>
 
   <div class="layer">
@@ -582,52 +621,110 @@ function qualityNote(q){
 }
 
 function claimPopup(p){
-  var type=CLAIM_TYPE[first(p,"CSE_TYPE_NR")]||first(p,"CSE_TYPE_NR")||"Mining claim";
-  var acres=first(p,"RCRD_ACRS");
-  var note=qualityNote(first(p,"QLTY"));
-  var html="<h3>"+esc(first(p,"CSE_NAME")||"Unnamed claim")+"</h3>";
-  html+='<p class="kicker">'+esc(type)+
-        (first(p,"CSE_NR")?" &middot; "+esc(first(p,"CSE_NR")):"")+"</p>";
+  var n=+first(p,"n")||0;
+  var kinds=[["lode","Lode"],["placer","Placer"],["mill","Mill site"],
+             ["tunnel","Tunnel site"],["other","Other"]]
+    .map(function(k){var v=first(p,k[0]); return v?k[1]+" "+v:null;})
+    .filter(Boolean).join(", ");
+  var lo=first(p,"acres_min"), hi=first(p,"acres_max"), mid=first(p,"acres_mid");
+  var acres=null;
+  if(lo!==null&&hi!==null)
+    acres=(lo===hi)?lo+" acres":lo+" to "+hi+" acres, typically "+mid;
+
+  var html="<h3>"+n+(n===1?" claim":" claims")+" on this ground</h3>";
+  html+='<p class="kicker">About half a mile across</p>';
   html+=rows([
-    ["Status",first(p,"CSE_DISP")],
-    ["Also here",p._mix?"Both lode and placer claims cover this ground":null],
-    ["Occurrences in this block",first(p,"_occ")],
-    ["Acres",acres?Number(acres).toFixed(1):null],
-    ["Serial",first(p,"CSE_NR")],
-    ["Legacy no.",first(p,"LEG_CSE_NR")]
+    ["Kinds",kinds||null],
+    ["Claim size",acres],
+    ["Occurrences here",first(p,"_occ")]
   ]);
-  html+='<p class="warn">'+(note?esc(note)+" ":"")+
-    "BLM records claims only to the affected quarter sections. The staked corners are in the Notice of Location at the county and the BLM state office.</p>";
-  if(p._occ)
-    html+='<p class="warn">Occurrences listed above are what DOGAMI has recorded on this ground. '+
-      "They are not what the claim is filed for &mdash; BLM's claim data carries no commodity.</p>";
+  html+='<p class="warn">BLM records a claim only to the quarter sections it '+
+    "affects, so this square means claims cover part of this ground &mdash; not "+
+    "that every acre of it is staked, and not where the corners are. Those are "+
+    "in the Notice of Location at the county and the BLM state office. "+
+    "Look up an individual claim in MLRS.</p>";
+  if(first(p,"_occ"))
+    html+='<p class="warn">Occurrences listed are what DOGAMI has recorded on '+
+      "this ground. They are not what the claims are filed for &mdash; BLM&rsquo;s "+
+      "claim data carries no commodity.</p>";
   return html;
 }
 
 /* DOGAMI groups occurrences by Type. Their own legend colours are pale
    pastels meant for a white background, so these are darkened versions that
    stay legible on the topo basemap. */
-var CAT_COLOR={
-  gold:"#E8A200", silver:"#98A6B4", metal:"#7C5CA8",
-  sunstone:"#C1520F", opal:"#D4569B", agate:"#2E8B8B",
-  wood:"#6B4423", thunderegg:"#4A6FC4", obsidian:"#22222A", gem_other:"#8A9A3B"
-};
-var CAT_LABEL={
-  gold:"Gold", silver:"Silver", metal:"Other metal",
-  sunstone:"Sunstone", opal:"Opal", agate:"Agate / jasper",
-  wood:"Petrified wood", thunderegg:"Thunderegg / crystal",
-  obsidian:"Obsidian", gem_other:"Other gem"
-};
+/* ------------------------------------------------------------------
+   Every gem category the map knows about, in the order they appear in
+   the layer list. Each is its own toggle and its own map layer.
+
+   src  which datasets can supply this category:
+          "milo"  DOGAMI occurrences only
+          "rh"    the rockhounding file only
+          "both"
+        MILO records no carnelian, chalcedony, jade, bloodstone,
+        amethyst or garnet at all - those words never appear in its
+        commodity field. Marking that here stops us shipping a toggle
+        that can never match anything, which is how the jasper problem
+        happened.
+
+   rare  drawn in the collapsed "Rare finds" section.
+   ------------------------------------------------------------------ */
+var GEMS=[
+  {cat:"sunstone",   label:"Sunstone",        color:"#C1520F", src:"both"},
+  {cat:"opal_fire",  label:"Precious / fire opal", color:"#F0584B", src:"rh"},
+  {cat:"opal",       label:"Opal",            color:"#D4569B", src:"both"},
+  {cat:"agate",      label:"Agate",           color:"#2E8B8B", src:"both"},
+  {cat:"jasper",     label:"Jasper",          color:"#A8412B", src:"milo"},
+  {cat:"carnelian",  label:"Carnelian",       color:"#D2691E", src:"rh"},
+  {cat:"chalcedony", label:"Chalcedony",      color:"#7FA8B8", src:"rh"},
+  {cat:"thunderegg", label:"Thunderegg",      color:"#4A6FC4", src:"both"},
+  {cat:"limbcast",   label:"Limb casts",      color:"#8A6BB5", src:"rh"},
+  {cat:"wood",       label:"Petrified wood",  color:"#6B4423", src:"both"},
+  {cat:"obsidian",   label:"Obsidian",        color:"#22222A", src:"both"},
+  {cat:"gem_other",  label:"Other gem",       color:"#8A9A3B", src:"both"},
+  /* rare - collapsed by default so the list stays usable on a phone */
+  {cat:"jade",       label:"Jade",            color:"#3E7D5A", src:"rh",   rare:true},
+  {cat:"bloodstone", label:"Bloodstone",      color:"#7B2E2E", src:"rh",   rare:true},
+  {cat:"amethyst",   label:"Amethyst",        color:"#7B52AB", src:"rh",   rare:true},
+  {cat:"sagenite",   label:"Sagenite agate",  color:"#4F8F7B", src:"rh",   rare:true},
+  {cat:"malachite",  label:"Malachite / azurite", color:"#1E7A6B", src:"rh", rare:true},
+  {cat:"zeolite",    label:"Zeolite",         color:"#9C8B6E", src:"both", rare:true},
+  {cat:"garnet",     label:"Garnet",          color:"#8E1B3A", src:"rh",   rare:true},
+  {cat:"rhodonite",  label:"Rhodonite",       color:"#C26A8A", src:"both", rare:true},
+  {cat:"chrysoprase",label:"Chrysoprase",     color:"#5FA85F", src:"rh",   rare:true},
+  {cat:"tourmaline", label:"Tourmaline",      color:"#2E6F8E", src:"rh",   rare:true}
+];
+
+/* Metals stay one bucket. They are off by default and get their own
+   map later; splitting them here would be noise. */
+var METALS=[
+  {cat:"gold",   label:"Gold",        color:"#E8A200"},
+  {cat:"silver", label:"Silver",      color:"#98A6B4"},
+  {cat:"metal",  label:"Other metal", color:"#7C5CA8"}
+];
+
+var CAT_COLOR={}, CAT_LABEL={};
+GEMS.concat(METALS).forEach(function(g){
+  CAT_COLOR[g.cat]=g.color; CAT_LABEL[g.cat]=g.label;
+});
+
 var MILO_COLORS=(function(){
   var e=["match",["coalesce",["get","_cat"],""]];
   Object.keys(CAT_COLOR).forEach(function(k){e.push(k,CAT_COLOR[k]);});
   e.push("#7A6A55"); return e;
 })();
-/* gold and silver get drawn a touch larger than the rest */
+
+/* Dot sizing. The old curve shrank to 2.8 px at zoom 9, which is close
+   to invisible on a phone when you are looking at the whole state - and
+   looking at the whole state is exactly when you want to see where the
+   clusters are. So the zoomed-out end is raised: a dot never goes below
+   5 px no matter how far out you are, and the curve flattens rather
+   than collapsing. */
 var MILO_RADIUS=["interpolate",["linear"],["zoom"],
-  9,["case",["in",["get","_cat"],["literal",["gold","silver"]]],4,2.8],
-  13,["case",["in",["get","_cat"],["literal",["gold","silver"]]],7,5],
-  16,["case",["in",["get","_cat"],["literal",["gold","silver"]]],10,7]];
+  5,  5,
+  9,  6.5,
+  13, 8,
+  16, 10];
 
 function miloPopup(p){
   var name=first(p,"SiteName");
@@ -671,38 +768,130 @@ function miloPopup(p){
 }
 
 /* ---------- layer definitions ---------- */
+/* Build the layer rows and their map layers from GEMS. Every category
+   shares one source file and one popup; what differs is the filter on
+   _cat and the switch that drives it. Adding a category is now a line
+   in GEMS, not a new block here and a new block of HTML up top. */
+function gemRow(g){
+  var row=document.createElement("div");
+  row.className="layer";
+  row.innerHTML='<span class="swatch" style="background:'+g.color+'"></span>'+
+    '<span class="txt"><span class="nm">'+esc(g.label)+'</span>'+
+    '<span class="src" id="src-'+g.cat+'">—</span></span>'+
+    '<span class="sw"><input type="checkbox" id="ck-'+g.cat+'" checked><i></i></span>';
+  return row;
+}
+(function buildGemRows(){
+  var main=document.getElementById("gemrows");
+  var rareBox=document.getElementById("gemrows-rare");
+  GEMS.forEach(function(g){ (g.rare?rareBox:main).appendChild(gemRow(g)); });
+
+  var btn=document.getElementById("rare-toggle");
+  btn.onclick=function(){
+    var open=rareBox.hasAttribute("hidden");
+    if(open){rareBox.removeAttribute("hidden");} else {rareBox.setAttribute("hidden","");}
+    btn.setAttribute("aria-expanded",String(open));
+    btn.textContent=open?"Rare finds ▴":"Rare finds ▾";
+  };
+})();
+
+/* DOGAMI's own colours where the OGDC legend gives one, otherwise a
+   neutral. Only the productive units are downloaded, so this is short. */
+var GEO_COLORS={
+  "Leslie Gulch Ash-flow Tuff":"#C46A2E",
+  "Eastern tholeiitic lavas":"#8C340E",
+  "Tuff of Birch Creek":"#D2A24C",
+  "High-silica rhyolite domes and shallow intrusions":"#B04A8A",
+  "Volcanic mud flow breccia":"#7A6A55",
+  "Lower tuffaceous sedimentary rocks":"#B59D50",
+  "John Day Formation":"#EBDDB7",
+  "Rhyolite flows and domes":"#9E5AA8",
+  "Rhyolitic flows":"#A87ABF",
+  "Clarno Formation":"#C9B285",
+  "Porphyritic rhyolite":"#8E6FB0"
+};
+var GEO_FALLBACK="#A89B84";
+
 var LAYERS=[
   {
-    id:"milometal", file:"data/milo.geojson", check:"ck-milometal", src:"src-milometal",
-    order:4, defaultOn:true, point:true, filter:["==",["get","_grp"],"metal"],
-    popup:function(p){return miloPopup(p);}
+    /* Only the map units MILO shows actually yield agate, thundereggs or
+       opal - the filtering happens in fetch.py, not here. Drawn first and
+       kept pale so everything else reads on top of it. */
+    id:"geology", file:"data/geology.geojson", check:"ck-geology", src:"src-geology",
+    order:1, defaultOn:true, opacity:0.35, opSlider:"op-geology",
+    fill:function(){return matchExpr("MAP_UNIT_N",GEO_COLORS,GEO_FALLBACK);},
+    line:"#6A5B45", lineWidth:0.5,
+    popup:function(p){
+      var name=first(p,"MAP_UNIT_N","FORMATION")||"Geologic unit";
+      var html="<h3>"+esc(name)+"</h3>";
+      html+='<p class="kicker">'+esc([first(p,"MAP_UNIT_L"),first(p,"AGE_NAME")]
+        .filter(Boolean).join(" &middot; "))+"</p>";
+      html+=rows([
+        ["Rock type",first(p,"G_ROCK_TYP")],
+        ["Lithology",first(p,"LITH_GEN_U")],
+        ["Group",first(p,"TERRANE_GR")],
+        ["Member",first(p,"MEMBER")]
+      ]);
+      html+='<p class="warn">This unit is on the map because MILO records '+
+        "agate, thundereggs or opal coming out of it more often than out of "+
+        "other units. That is a record of where people have looked and found "+
+        "something, not a promise about this particular outcrop.</p>";
+      var cite=first(p,"Citation"), link=first(p,"Link");
+      if(cite) html+='<p class="kicker" style="margin:9px 0 0">'+
+        (link?'<a href="'+esc(link)+'" target="_blank" rel="noopener">'+esc(cite)+"</a>":esc(cite))+"</p>";
+      return html;
+    }
   },
   {
-    id:"milogem", file:"data/milo.geojson", check:"ck-milogem", src:"src-milogem",
-    order:5, defaultOn:true, point:true, filter:["==",["get","_grp"],"gem"],
+    id:"milometal", file:"data/milo.geojson", sourceId:"milo",
+    check:"ck-milometal", src:"src-milometal",
+    order:4, defaultOn:false, point:true, filter:["==",["get","_grp"],"metal"],
     popup:function(p){return miloPopup(p);}
-  },
+  }
+].concat(GEMS.map(function(g,i){
+  return {
+    id:"gem_"+g.cat, file:"data/milo.geojson", sourceId:"milo",
+    check:"ck-"+g.cat, src:"src-"+g.cat,
+    order:5+i, defaultOn:true, point:true, gemCat:g.cat,
+    filter:["==",["get","_cat"],g.cat],
+    popup:function(p){return miloPopup(p);}
+  };
+})).concat(GEMS.map(function(g,i){
+  return {
+    /* Your field sites. Same category switch as the MILO layer above -
+       one toggle lights both sources - but drawn larger and squarer so
+       you can tell a site you recorded from an agency record. */
+    id:"rh_"+g.cat, file:"data/rockhounding.geojson", sourceId:"rh",
+    check:"ck-"+g.cat, src:"src-"+g.cat, countAs:g.cat, countSrc:"rh",
+    order:40+i, defaultOn:true, point:true, rh:true, gemCat:g.cat,
+    popup:function(p){return rhPopup(p);}
+  };
+})).concat([
   {
+    /* Claims arrive as cells, not polygons - see aggregate_claims in
+       fetch.py.
+
+       The fill is deliberately almost nothing. An earlier version shaded
+       cells darker as the claim count rose, which read well on its own
+       and was useless in practice: it painted over the geology, and the
+       geology is the reason you are looking at that ground. The count
+       goes in a label instead, so the information costs no ink. Slide
+       "Fill strength" up if you want the shading back. */
     id:"claims", file:"data/claims.geojson", check:"ck-claims", src:"src-claims",
-    order:3, defaultOn:true, opacity:0, hitFill:true,
-    line:function(){return ["case",
-      ["==",["get","_mix"],1], "#2E8B4A",
-      ["match",["coalesce",["get","CSE_TYPE_NR"],""],
-        "384201","#F2B01E","384203","#F2B01E",
-        "384101","#2C6FB5","384103","#2C6FB5",
-        "384301","#8B4A6B","384303","#8B4A6B",
-        "384401","#6B4A8B","384403","#6B4A8B","#8A7E6A"]];},
-    lineWidth:1.5,
-    label:["coalesce",["get","CSE_NAME"],["get","CSE_NR"],""],
+    labelMinzoom:10,
+    order:3, defaultOn:true, opacity:0.07, opSlider:"op-claims",
+    fill:function(){return "#B4530A";},
+    line:"#8A6A3A", lineWidth:0.9,
+    label:["case",[">",["get","n"],1],["to-string",["get","n"]],""],
     popup:function(p){return claimPopup(p);}
   },
   {
     /* Loaded from a file on the phone, never from the web. See customApply. */
     id:"custom", local:true, custom:true, check:"ck-custom", src:"src-custom",
-    order:6, defaultOn:false,
+    order:99, defaultOn:false,
     popup:function(p){return customPopup(p);}
   }
-];
+]);
 
 /* ---------- load ---------- */
 var loaded={}, RAW={};
@@ -720,25 +909,45 @@ map.on("load",function(){
     paint:{"text-color":"#4A1502","text-halo-color":"#FFFFFF","text-halo-width":2.2}});
   wpRefresh();
 
+  /* One network request and one JSON parse per distinct file, however
+     many layers read it. Without this the gem categories would each
+     fetch milo.geojson on their own. */
+  var fileCache={};
+  function fetchOnce(url){
+    if(!fileCache[url]){
+      fileCache[url]=fetch(url).then(function(r){return r.ok?r.json():null;});
+    }
+    return fileCache[url];
+  }
+
   LAYERS.forEach(function(L){
     if(L.local){ customBoot(L); return; }
-    fetch(L.file).then(function(r){return r.ok?r.json():null;}).then(function(g){
+    fetchOnce(L.file).then(function(g){
       if(!g||!g.features||!g.features.length){markMissing(L);return;}
-      if(L.id==="claims")markMixedClaims(g);
+      if(L.rh){ RAW.rh=g; marksApply(); }
       build(L,g);
       loaded[L.id]=true;
       RAW[L.id]=g;
       if(L.id==="milometal")RAW.milo=g;
       if(RAW.claims&&RAW.milo)crossReference(RAW.claims,RAW.milo);
       var ck=document.getElementById(L.check);
-      ck.disabled=false;
-      setVisible(L,ck.checked);
+      if(ck){
+        ck.disabled=false;
+        var gate=document.getElementById("ck-rh");
+        setVisible(L, ck.checked && !(L.rh && gate && !gate.checked));
+      }
       var n=g.features.length;
       if(L.filter&&L.filter[1]&&L.filter[1][1]==="_grp"){
         var want=L.filter[2];
         n=g.features.filter(function(f){return f.properties&&f.properties._grp===want;}).length;
+      } else if(L.gemCat){
+        n=g.features.filter(function(f){
+          return f.properties&&f.properties._cat===L.gemCat;}).length;
       }
-      document.getElementById(L.src).textContent=n.toLocaleString()+" recorded";
+      if(L.id==="geology") buildLegend(g);
+      if(L.gemCat) countPut(L.gemCat, L.rh?"rh":"milo", n);
+      else if(document.getElementById(L.src))
+        document.getElementById(L.src).textContent=n.toLocaleString()+" recorded";
     }).catch(function(err){
       /* This used to swallow everything. One thrown error anywhere above
          marked the layer unavailable with no trace, so a layer with
@@ -766,7 +975,7 @@ function customBlank(L){
   el.textContent="No file loaded";
   el.classList.add("miss");
   var ck=document.getElementById(L.check);
-  ck.checked=false; ck.disabled=true;
+  if(ck){ ck.checked=false; ck.disabled=true; }
 }
 function customBoot(L){
   var saved=customLoad();
@@ -842,18 +1051,197 @@ function customPopup(p){
   };
 })();
 
+/* Each gem category is fed by two files - DOGAMI's occurrences and your
+   own field sites - and both want to write the same line in the layer
+   list. So counts are collected here and the line is rendered once both
+   are known, instead of each layer overwriting the other. */
+var COUNTS={};
+function countPut(cat,src,n){
+  (COUNTS[cat]||(COUNTS[cat]={}))[src]=n;
+  var el=document.getElementById("src-"+cat);
+  if(!el)return;
+  var c=COUNTS[cat], bits=[];
+  if(c.milo) bits.push(c.milo.toLocaleString()+" DOGAMI");
+  if(c.rh)   bits.push(c.rh.toLocaleString()+" field");
+  if(bits.length){
+    el.classList.remove("miss");
+    el.textContent=bits.join(" · ");
+  } else {
+    /* Zero in both is a fact about the data, not a failure. MILO records
+       no carnelian, chalcedony, jade, bloodstone, amethyst or garnet. */
+    el.classList.add("miss");
+    el.textContent="nothing recorded";
+  }
+}
+
+/* ------------------------------------------------------------------
+   Marks on field sites.
+
+   Kept on this phone, keyed to a site id that fetch never changes. They
+   are applied onto the loaded features as _dud / _fav / _seen, so the
+   map can filter and size on them - but they are never written back to
+   rockhounding.geojson, because the next rebuild of that file would
+   throw them away.
+
+   Nothing is ever deleted. A dud is hidden, and "Show hidden duds"
+   brings it back.
+   ------------------------------------------------------------------ */
+var MARK_KEY="fieldmap.marks.v1";
+var MARKS=(function(){ try{return JSON.parse(localStorage.getItem(MARK_KEY))||{};}
+                       catch(e){return {};} })();
+
+function marksSave(){
+  try{ localStorage.setItem(MARK_KEY,JSON.stringify(MARKS)); }
+  catch(e){ toast("No room to save that mark."); }
+}
+function markOf(id){ return MARKS[id]||{}; }
+function markSet(id,field,value){
+  var m=MARKS[id]||(MARKS[id]={});
+  if(value) m[field]=1; else delete m[field];
+  if(!Object.keys(m).length) delete MARKS[id];
+  marksSave(); marksApply(); 
+  var src=map.getSource("rh");
+  if(src&&RAW.rh)src.setData(RAW.rh);
+}
+function marksApply(){
+  if(!RAW.rh)return;
+  (RAW.rh.features||[]).forEach(function(f){
+    var m=markOf(f.properties.id);
+    f.properties._dud=m.dud?1:0;
+    f.properties._fav=m.fav?1:0;
+    f.properties._seen=m.seen?1:0;
+    if(m.note)f.properties._note=m.note; else delete f.properties._note;
+  });
+}
+function marksFilter(){
+  var showDuds=document.getElementById("ck-duds");
+  return (showDuds&&showDuds.checked)?null:["!=",["get","_dud"],1];
+}
+function marksRefilter(){
+  LAYERS.forEach(function(L){
+    if(!L.rh||!map.getLayer(L.id+"-f"))return;
+    map.setFilter(L.id+"-f",rhFilter(L));
+    if(map.getLayer(L.id+"-t"))map.setFilter(L.id+"-t",rhFilter(L));
+  });
+}
+function rhFilter(L){
+  var f=["all",["==",["get","_cat"],L.gemCat]];
+  var mf=marksFilter(); if(mf)f.push(mf);
+  return f;
+}
+
+function rhPopup(p){
+  var id=first(p,"id");
+  var m=markOf(id);
+  var html="<h3>"+esc(first(p,"name")||"Field site")+"</h3>";
+  var kick=[CAT_LABEL[first(p,"_cat")]||first(p,"stone"),first(p,"region")]
+    .filter(Boolean).join(" &middot; ");
+  if(kick)html+='<p class="kicker">'+esc(kick)+"</p>";
+  var L=first(p,"likelihood"), S=first(p,"sources");
+  html+=rows([
+    ["Stones",first(p,"all stones")],
+    ["Ground",first(p,"ground")],
+    ["Access",first(p,"access")],
+    ["Likelihood",L?L+" of 5"+(S?" &middot; "+S+(S==1?" source":" sources"):""):null],
+    ["Your note",first(p,"_note")]
+  ]);
+  var n=first(p,"notes");
+  if(n)html+='<p class="warn" style="color:#3D3728;border-top-color:#DCD4C4">'+esc(n)+"</p>";
+
+  var g=String(first(p,"ground")||"").toLowerCase();
+  if(g.indexOf("private")>=0||g.indexOf("unverified")>=0)
+    html+='<p class="warn">Ground reads &ldquo;'+esc(first(p,"ground"))+
+      "&rdquo;. Check the parcel before you walk in.</p>";
+
+  html+='<div class="acts">'+
+    '<button id="mk-fav">'+(m.fav?"★ Favourite":"☆ Favourite")+"</button>"+
+    '<button id="mk-seen">'+(m.seen?"✓ Visited":"Visited")+"</button>"+
+    '<button id="mk-dud">'+(m.dud?"Un-hide":"Dud — hide")+"</button>"+
+    '<button id="mk-note">Note</button>'+
+    "</div>";
+  setTimeout(function(){
+    var b;
+    if((b=document.getElementById("mk-fav")))
+      b.onclick=function(){markSet(id,"fav",!markOf(id).fav);marksRefilter();
+        b.textContent=markOf(id).fav?"★ Favourite":"☆ Favourite";};
+    if((b=document.getElementById("mk-seen")))
+      b.onclick=function(){markSet(id,"seen",!markOf(id).seen);
+        b.textContent=markOf(id).seen?"✓ Visited":"Visited";};
+    if((b=document.getElementById("mk-dud")))
+      b.onclick=function(){
+        markSet(id,"dud",!markOf(id).dud); marksRefilter();
+        toast(markOf(id).dud?"Hidden. Turn on \u201cShow hidden duds\u201d to see it again."
+                            :"Back on the map.");
+        if(openPopup&&markOf(id).dud)openPopup.remove();
+      };
+    if((b=document.getElementById("mk-note")))
+      b.onclick=function(){
+        var cur=(MARKS[id]&&MARKS[id].note)||"";
+        var t=prompt("Note for "+(first(p,"name")||"this site"),cur);
+        if(t===null)return;
+        var mm=MARKS[id]||(MARKS[id]={});
+        if(t.trim())mm.note=t.trim(); else delete mm.note;
+        if(!Object.keys(mm).length)delete MARKS[id];
+        marksSave(); marksApply();
+        var src=map.getSource("rh"); if(src&&RAW.rh)src.setData(RAW.rh);
+        toast("Note saved.");
+      };
+  },0);
+  return html;
+}
+
+(function marksIO(){
+  var ex=document.getElementById("marks-export");
+  var im=document.getElementById("marks-import");
+  var fl=document.getElementById("marks-file");
+  var duds=document.getElementById("ck-duds");
+  if(duds)duds.addEventListener("change",marksRefilter);
+  if(ex)ex.onclick=function(){
+    var n=Object.keys(MARKS).length;
+    if(!n){toast("No marks to save yet.");return;}
+    var blob=new Blob([JSON.stringify(MARKS,null,1)],{type:"application/json"});
+    var a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="field-marks-"+new Date().toISOString().slice(0,10)+".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){URL.revokeObjectURL(a.href);},2000);
+    toast(n+(n===1?" mark saved.":" marks saved."));
+  };
+  if(im&&fl){
+    im.onclick=function(){ fl.value=""; fl.click(); };
+    fl.onchange=function(){
+      var f=fl.files&&fl.files[0]; if(!f)return;
+      var rd=new FileReader();
+      rd.onload=function(){
+        var o; try{o=JSON.parse(rd.result);}catch(e){toast("That file is not readable.");return;}
+        if(!o||typeof o!=="object"){toast("No marks in that file.");return;}
+        /* merged, not replaced - restoring an old file never loses
+           anything marked since */
+        var added=0;
+        Object.keys(o).forEach(function(k){
+          if(!MARKS[k]){MARKS[k]=o[k];added++;}
+          else Object.keys(o[k]).forEach(function(f2){
+            if(!(f2 in MARKS[k])){MARKS[k][f2]=o[k][f2];added++;}
+          });
+        });
+        marksSave(); marksApply(); marksRefilter();
+        var src=map.getSource("rh"); if(src&&RAW.rh)src.setData(RAW.rh);
+        toast(added?("Restored, "+added+" added."):"Nothing new in that file.");
+      };
+      rd.readAsText(f);
+    };
+  }
+})();
+
 function markMissing(L){
   var el=document.getElementById(L.src);
+  if(!el)return;
   el.textContent="Not downloaded yet — run fetch.py";
   el.classList.add("miss");
   var ck=document.getElementById(L.check);
-  ck.checked=false; ck.disabled=true;
+  if(ck){ ck.checked=false; ck.disabled=true; }
 }
 
-/* A claim gets marked "_mix" when a claim of the other kind (lode vs placer)
-   covers substantially the same ground. Those draw green, so a block holding
-   both reads at a glance. Compared by bounding box, which is right for the
-   survey-grid rectangles BLM hands back. */
 /* Bounding box of any geometry, as [w,s,e,n]. */
 function bboxOf(g){
   if(!g||!g.coordinates)return null;
@@ -867,28 +1255,11 @@ function bboxOf(g){
   return isFinite(b[0])?b:null;
 }
 
-/* Ray casting: is this point inside this ring? */
-function inRing(pt,ring){
-  var x=pt[0],y=pt[1],hit=false;
-  for(var i=0,j=ring.length-1;i<ring.length;j=i++){
-    var xi=ring[i][0],yi=ring[i][1],xj=ring[j][0],yj=ring[j][1];
-    if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/((yj-yi)||1e-12)+xi))hit=!hit;
-  }
-  return hit;
-}
-function inGeom(pt,g){
-  if(!g)return false;
-  if(g.type==="Polygon")return inRing(pt,g.coordinates[0]);
-  if(g.type==="MultiPolygon")
-    return g.coordinates.some(function(poly){return inRing(pt,poly[0]);});
-  return false;
-}
-
-/* Tallies which recorded occurrences fall inside each claim block. This is a
-   spatial fact about the ground, NOT a statement about what the claim is for:
-   BLM's data carries no commodity, and staking over an old occurrence proves
-   nothing about intent. Phrased that way in the popup on purpose. */
 function crossReference(claims,milo){
+  /* Tally which recorded occurrences fall inside each claim cell. This is
+     a spatial fact about the ground, NOT a statement about what anything
+     is staked for: BLM's claim data carries no commodity. Phrased that
+     way in the popup on purpose. */
   var pts=(milo.features||[]).map(function(f){
     if(!f.geometry||f.geometry.type!=="Point")return null;
     var cat=f.properties&&f.properties._cat;
@@ -897,29 +1268,15 @@ function crossReference(claims,milo){
   }).filter(Boolean);
   if(!pts.length)return;
 
-  /* Bucket the points on a coarse grid. Statewide MILO is thousands of
-     points; testing every one against every claim is a product big enough
-     to lock the page. A claim only needs the points near it. */
-  var CELL=0.05, grid={};
-  pts.forEach(function(p){
-    var k=Math.floor(p.c[0]/CELL)+":"+Math.floor(p.c[1]/CELL);
-    (grid[k]||(grid[k]=[])).push(p);
-  });
-  function ptsNear(g){
-    var b=bboxOf(g); if(!b)return [];
-    var out=[],seen={};
-    for(var x=Math.floor(b[0]/CELL);x<=Math.floor(b[2]/CELL);x++)
-      for(var y=Math.floor(b[1]/CELL);y<=Math.floor(b[3]/CELL);y++){
-        var k=x+":"+y;
-        if(grid[k]&&!seen[k]){seen[k]=1;out=out.concat(grid[k]);}
-      }
-    return out;
-  }
-
+  /* Cells are axis-aligned squares, so a bounds test is exact and there
+     is no need for the ray casting the polygons used to require. */
   (claims.features||[]).forEach(function(cf){
+    var r=cf.geometry&&cf.geometry.coordinates&&cf.geometry.coordinates[0];
+    if(!r||r.length<4)return;
+    var w=r[0][0], s2=r[0][1], e=r[2][0], n=r[2][1];
     var tally={};
-    ptsNear(cf.geometry).forEach(function(p){
-      if(inGeom(p.c,cf.geometry)){
+    pts.forEach(function(p){
+      if(p.c[0]>=w&&p.c[0]<e&&p.c[1]>=s2&&p.c[1]<n){
         var k=String(p.com).trim();
         tally[k]=(tally[k]||0)+1;
       }
@@ -936,56 +1293,6 @@ function crossReference(claims,milo){
   if(src)src.setData(claims);
 }
 
-function markMixedClaims(geoj){
-  var LODE={"384101":1,"384103":1}, PLACER={"384201":1,"384203":1};
-  var items=[];
-  (geoj.features||[]).forEach(function(f){
-    var t=f.properties&&f.properties.CSE_TYPE_NR;
-    var kind=LODE[t]?"L":(PLACER[t]?"P":null);
-    if(!kind||!f.geometry)return;
-    var b=[Infinity,Infinity,-Infinity,-Infinity];
-    (function walk(c){
-      if(typeof c[0]==="number"){
-        if(c[0]<b[0])b[0]=c[0]; if(c[1]<b[1])b[1]=c[1];
-        if(c[0]>b[2])b[2]=c[0]; if(c[1]>b[3])b[3]=c[1];
-      } else c.forEach(walk);
-    })(f.geometry.coordinates);
-    items.push({f:f,kind:kind,b:b});
-  });
-
-  function area(b){return Math.max(0,b[2]-b[0])*Math.max(0,b[3]-b[1]);}
-  function overlapFrac(a,c){
-    var w=Math.min(a[2],c[2])-Math.max(a[0],c[0]);
-    var h=Math.min(a[3],c[3])-Math.max(a[1],c[1]);
-    if(w<=0||h<=0)return 0;
-    var small=Math.min(area(a),area(c));
-    return small>0 ? (w*h)/small : 0;
-  }
-
-  /* Only claims that share a grid cell can overlap, so compare within
-     cells rather than sweeping every pair. The old all-pairs loop was
-     fine for a few hundred claims and unusable for thousands. */
-  var CELL2=0.02, cells={};
-  items.forEach(function(it,idx){
-    for(var x=Math.floor(it.b[0]/CELL2);x<=Math.floor(it.b[2]/CELL2);x++)
-      for(var y=Math.floor(it.b[1]/CELL2);y<=Math.floor(it.b[3]/CELL2);y++){
-        var k=x+":"+y;
-        (cells[k]||(cells[k]=[])).push(idx);
-      }
-  });
-  Object.keys(cells).forEach(function(k){
-    var ids=cells[k];
-    for(var i=0;i<ids.length;i++)
-      for(var j=i+1;j<ids.length;j++){
-        var A=items[ids[i]],B=items[ids[j]];
-        if(A.kind===B.kind)continue;
-        if(overlapFrac(A.b,B.b)>0.35){
-          A.f.properties._mix=1; B.f.properties._mix=1;
-        }
-      }
-  });
-  return geoj;
-}
 
 /* addLayer throws on an invalid layer. A label layer failing - which it will
    wherever glyphs cannot be reached - must not stop the claim outlines from
@@ -1003,21 +1310,26 @@ function build(L,geoj){
      so the default quietly deletes isolated claims at low zoom while dense
      overlapping blocks survive. That is not a data problem and no amount of
      refetching fixes it. maxzoom:16 keeps detail at the top end. */
-  if(!map.getSource(L.id))map.addSource(L.id,{type:"geojson",data:geoj,
+  /* Layers that read the same file share one source. Twenty-odd gem
+     categories all come out of milo.geojson; giving each its own source
+     would hold twenty copies of the same features in memory and parse
+     the file twenty times. They differ by filter, not by data. */
+  L.srcId = L.sourceId || L.id;
+  if(!map.getSource(L.srcId))map.addSource(L.srcId,{type:"geojson",data:geoj,
     tolerance:0, buffer:64, maxzoom:16});
   var vis=L.defaultOn?"visible":"none";
 
   if(L.custom){
-    addLayerSafe({id:L.id+"-f",type:"circle",source:L.id,layout:{visibility:vis},
+    addLayerSafe({id:L.id+"-f",type:"circle",source:L.srcId,layout:{visibility:vis},
       filter:["==",["geometry-type"],"Point"],
       paint:{"circle-radius":11,
              "circle-color":["case",["==",["get","status"],"known deposit"],"#5C5548","#E5007D"],
              "circle-stroke-width":2.2,"circle-stroke-color":"#FFFFFF"}});
-    addLayerSafe({id:L.id+"-l",type:"line",source:L.id,layout:{visibility:vis},
+    addLayerSafe({id:L.id+"-l",type:"line",source:L.srcId,layout:{visibility:vis},
       filter:["!=",["geometry-type"],"Point"],
       paint:{"line-color":"#E5007D","line-width":2}});
     /* short labels — a rank number — sit inside the dot and never hide */
-    addLayerSafe({id:L.id+"-t",type:"symbol",source:L.id,
+    addLayerSafe({id:L.id+"-t",type:"symbol",source:L.srcId,
       filter:["all",["==",["geometry-type"],"Point"],
               ["<=",["length",["coalesce",["get","label"],["get","name"],""]],3]],
       layout:{visibility:vis,
@@ -1027,7 +1339,7 @@ function build(L,geoj){
         "text-font":["Noto Sans Bold"]},
       paint:{"text-color":"#FFFFFF"}});
     /* anything longer is written beside the dot instead */
-    addLayerSafe({id:L.id+"-t2",type:"symbol",source:L.id,minzoom:10,
+    addLayerSafe({id:L.id+"-t2",type:"symbol",source:L.srcId,minzoom:10,
       filter:[">",["length",["coalesce",["get","label"],["get","name"],""]],3],
       layout:{visibility:vis,
         "text-field":["coalesce",["get","label"],["get","name"],""],
@@ -1038,12 +1350,38 @@ function build(L,geoj){
     return;
   }
 
+  if(L.rh){
+    /* Field sites. Drawn a touch larger than the agency records so the
+       two read apart at a glance, and driven by your marks: a favourite
+       grows a white ring, a visited site fades, a dud is filtered out
+       entirely until you ask for it back. */
+    addLayerSafe({id:L.id+"-f",type:"circle",source:L.srcId,
+      layout:{visibility:vis}, filter:rhFilter(L),
+      paint:{
+        "circle-radius":["*",
+          ["case",["==",["get","_fav"],1],1.45,1],
+          ["interpolate",["linear"],["zoom"], 5,5.5, 9,7, 13,8.5, 16,11]],
+        "circle-color":MILO_COLORS,
+        "circle-opacity":["case",["==",["get","_seen"],1],0.45,1],
+        "circle-stroke-width":["case",["==",["get","_fav"],1],3,1.6],
+        "circle-stroke-color":"#FFFFFF",
+        "circle-stroke-opacity":["case",["==",["get","_seen"],1],0.5,0.95]}});
+    addLayerSafe({id:L.id+"-t",type:"symbol",source:L.srcId,minzoom:11,
+      layout:{visibility:vis,"text-field":["coalesce",["get","name"],""],
+              "text-size":11.5,"text-offset":[0,1.1],"text-anchor":"top",
+              "text-allow-overlap":false},
+      filter:rhFilter(L),
+      paint:{"text-color":"#2E2A20","text-halo-color":"rgba(255,255,255,.95)",
+             "text-halo-width":1.7}});
+    return;
+  }
+
   if(L.point){
-    var dot={id:L.id+"-f",type:"circle",source:L.id,layout:{visibility:vis},
+    var dot={id:L.id+"-f",type:"circle",source:L.srcId,layout:{visibility:vis},
       paint:{"circle-radius":MILO_RADIUS,"circle-color":MILO_COLORS,
              "circle-stroke-width":1.6,"circle-stroke-color":"#FFFFFF",
              "circle-stroke-opacity":.95}};
-    var lbl={id:L.id+"-t",type:"symbol",source:L.id,minzoom:13,
+    var lbl={id:L.id+"-t",type:"symbol",source:L.srcId,minzoom:13,
       layout:{visibility:vis,"text-field":["coalesce",["get","SiteName"],""],
               "text-size":11.5,"text-offset":[0,1.0],"text-anchor":"top",
               "text-allow-overlap":false},
@@ -1055,22 +1393,23 @@ function build(L,geoj){
   }
 
   if(L.opacity>0&&L.fill){
-    addLayerSafe({id:L.id+"-f",type:"fill",source:L.id,layout:{visibility:vis},
+    addLayerSafe({id:L.id+"-f",type:"fill",source:L.srcId,layout:{visibility:vis},
       paint:{"fill-color":L.fill(),"fill-opacity":L.opacity}});
   } else if(L.hitFill){
     /* invisible fill so the whole claim block is tappable, not just its edge */
-    addLayerSafe({id:L.id+"-f",type:"fill",source:L.id,layout:{visibility:vis},
+    addLayerSafe({id:L.id+"-f",type:"fill",source:L.srcId,layout:{visibility:vis},
       paint:{"fill-color":"#000","fill-opacity":0.01}});
   }
 
-  addLayerSafe({id:L.id+"-l",type:"line",source:L.id,layout:{visibility:vis},
+  addLayerSafe({id:L.id+"-l",type:"line",source:L.srcId,layout:{visibility:vis},
     paint:Object.assign({
       "line-color":typeof L.line==="function"?L.line():L.line,
       "line-width":L.lineWidth||1
     },L.dash?{"line-dasharray":L.dash}:{})});
 
   if(L.label){
-    addLayerSafe({id:L.id+"-t",type:"symbol",source:L.id,minzoom:13,
+    addLayerSafe({id:L.id+"-t",type:"symbol",source:L.srcId,
+      minzoom:(L.labelMinzoom!==undefined?L.labelMinzoom:13),
       layout:{visibility:vis,"text-field":L.label,"text-size":12,"text-allow-overlap":false},
       paint:{"text-color":"#2C1A12","text-halo-color":"rgba(242,237,226,.92)","text-halo-width":1.6}});
   }
@@ -1126,7 +1465,8 @@ map.on("click",function(e){
   var ids=[];
   LAYERS.forEach(function(L){
     if(!loaded[L.id])return;
-    if(!document.getElementById(L.check).checked)return;
+    var ckEl=document.getElementById(L.check);
+    if(!ckEl||!ckEl.checked)return;
     if(L.custom){
       if(map.getLayer(L.id+"-f"))ids.push(L.id+"-f");
       if(map.getLayer(L.id+"-l"))ids.push(L.id+"-l");
@@ -1172,22 +1512,99 @@ map.on("click",function(e){
   render();
 });
 
+function buildLegend(geoj){
+  var counts={};
+  (geoj.features||[]).forEach(function(f){
+    var k=(f.properties&&f.properties.MAP_UNIT_N)||"Other";
+    counts[k]=(counts[k]||0)+1;
+  });
+  var keys=Object.keys(counts).sort(function(a,b){return counts[b]-counts[a];});
+  var el=document.getElementById("legend");
+  if(!el)return;
+  el.innerHTML='<div class="hd">Units that yield agate, thundereggs or opal</div>'+
+    keys.map(function(k){
+      return '<div><b style="background:'+(GEO_COLORS[k]||GEO_FALLBACK)+'"></b>'+
+        esc(k)+"<em>"+counts[k]+"</em></div>";
+    }).join("");
+  var ck=document.getElementById("ck-geology");
+  el.classList.toggle("on",!!(ck&&ck.checked));
+}
+
 function setVisible(L,on){
   ["-f","-l","-t","-t2"].forEach(function(s){
     if(map.getLayer(L.id+s)) map.setLayoutProperty(L.id+s,"visibility",on?"visible":"none");
   });
+  if(L.id==="geology"){
+    var lg=document.getElementById("legend");
+    if(lg)lg.classList.toggle("on",on);
+  }
 }
 
 LAYERS.forEach(function(L){
   var ck=document.getElementById(L.check);
+  if(!ck)return;            /* a category with no row yet - skip, do not throw */
   ck.checked=L.defaultOn; ck.disabled=true;
-  ck.addEventListener("change",function(){ if(loaded[L.id]) setVisible(L,ck.checked); });
+  ck.addEventListener("change",function(){
+    if(loaded[L.id]){
+      var gate=document.getElementById("ck-rh");
+      var on=ck.checked && !(L.rh && gate && !gate.checked);
+      setVisible(L,on);
+    }
+    if(L.gemCat&&window.__syncAllGems) window.__syncAllGems();
+  });
   if(L.opSlider){
     document.getElementById(L.opSlider).addEventListener("input",function(){
       if(map.getLayer(L.id+"-f")) map.setPaintProperty(L.id+"-f","fill-opacity",this.value/100);
     });
   }
 });
+
+/* "Field sites" is a gate over the whole rockhounding file rather than a
+   switch of its own: turn it off and none of your sites draw, whatever
+   the category switches say; turn it back on and they return to whatever
+   those switches were. Keeps one toggle for "just show me the agency
+   records" without having to undo twenty category choices. */
+(function fieldSitesGate(){
+  var gate=document.getElementById("ck-rh");
+  if(!gate)return;
+  function apply(){
+    LAYERS.forEach(function(L){
+      if(!L.rh||!loaded[L.id])return;
+      var ck=document.getElementById(L.check);
+      setVisible(L, gate.checked && !!(ck&&ck.checked));
+    });
+  }
+  gate.addEventListener("change",apply);
+  window.__fieldGate=apply;
+})();
+
+/* "All gems" drives every category switch, and every category switch
+   reports back. When some are on and some off the master shows the
+   indeterminate dash instead of claiming one state or the other. */
+(function allGemsSwitch(){
+  var master=document.getElementById("ck-allgems");
+  if(!master)return;
+  function boxes(){
+    return GEMS.map(function(g){return document.getElementById("ck-"+g.cat);})
+               .filter(Boolean);
+  }
+  master.addEventListener("change",function(){
+    boxes().forEach(function(b){
+      if(b.disabled)return;
+      if(b.checked!==master.checked){
+        b.checked=master.checked;
+        b.dispatchEvent(new Event("change"));
+      }
+    });
+  });
+  window.__syncAllGems=function(){
+    var b=boxes().filter(function(x){return !x.disabled;});
+    if(!b.length)return;
+    var on=b.filter(function(x){return x.checked;}).length;
+    master.checked=on>0;
+    master.indeterminate=(on>0&&on<b.length);
+  };
+})();
 
 
 /* ---------- go to a coordinate ---------- */
