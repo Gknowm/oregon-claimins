@@ -278,17 +278,15 @@
       data wipes marks. Save them now and again.</p>
   </div>
 
-  <div class="layer">
-    <span class="swatch" style="background:#E5007D"></span>
-    <span class="txt"><span class="nm">Imported points</span><span class="src" id="src-custom">No file loaded</span></span>
-    <span class="sw"><input type="checkbox" id="ck-custom"><i></i></span>
-  </div>
-  <div class="sub" style="padding-bottom:16px">
-    <button class="impbtn" id="imp-pick" type="button">Load a file…</button>
-    <button class="impbtn" id="imp-clear" type="button">Remove</button>
-    <input type="file" id="imp-file" accept=".geojson,.json,application/geo+json,application/json" style="display:none">
-    <p class="lede" style="padding:8px 0 0;margin:0">A GeoJSON file from your phone. It stays on this
-      phone — nothing is uploaded and nothing leaves the app.</p>
+  <h2 class="sec" style="padding-top:22px">Imported points</h2>
+  <p class="lede">Load as many files as you like — sunstone targets and agate
+    targets side by side. Each gets its own colour and its own switch. They stay
+    on this phone; nothing is uploaded and nothing leaves the app.</p>
+  <div id="imports"></div>
+  <div class="sub" style="padding:12px 0 16px 0">
+    <button class="impbtn" id="imp-pick" type="button">Load files…</button>
+    <input type="file" id="imp-file" multiple
+           accept=".geojson,.json,application/geo+json,application/json" style="display:none">
   </div>
 
   <div class="layer">
@@ -884,12 +882,6 @@ var LAYERS=[
     line:"#8A6A3A", lineWidth:0.9,
     label:["case",[">",["get","n"],1],["to-string",["get","n"]],""],
     popup:function(p){return claimPopup(p);}
-  },
-  {
-    /* Loaded from a file on the phone, never from the web. See customApply. */
-    id:"custom", local:true, custom:true, check:"ck-custom", src:"src-custom",
-    order:99, defaultOn:false,
-    popup:function(p){return customPopup(p);}
   }
 ]);
 
@@ -908,6 +900,7 @@ map.on("load",function(){
             "text-font":["Noto Sans Bold"]},
     paint:{"text-color":"#4A1502","text-halo-color":"#FFFFFF","text-halo-width":2.2}});
   wpRefresh();
+  importBoot();
 
   /* One network request and one JSON parse per distinct file, however
      many layers read it. Without this the gem categories would each
@@ -921,7 +914,7 @@ map.on("load",function(){
   }
 
   LAYERS.forEach(function(L){
-    if(L.local){ customBoot(L); return; }
+    if(L.local)return;
     fetchOnce(L.file).then(function(g){
       if(!g||!g.features||!g.features.length){markMissing(L);return;}
       if(L.rh){ RAW.rh=g; marksApply(); }
@@ -958,45 +951,149 @@ map.on("load",function(){
   });
 });
 
-/* ---------- imported points ----------
-   A GeoJSON file picked from the phone. Kept in this phone's own storage,
-   never fetched from the web and never sent anywhere. Clearing Safari's
-   website data removes it, so keep the original file somewhere safe. */
-var CUSTOM_KEY="fieldmap.custom.v1";
+/* ---------- imported points ----------------------------------------
+   Any number of GeoJSON files, each with its own colour and its own
+   switch, so a sunstone target list and an agate target list sit on the
+   map together instead of replacing each other.
 
-function customLoad(){
-  try{return JSON.parse(localStorage.getItem(CUSTOM_KEY));}catch(e){return null;}
+   A feature's "label" is drawn inside the pin when it is three
+   characters or shorter - R1, B3, S7 - and beside the pin otherwise.
+   Falls back to "name" when there is no label.
+
+   Everything lives in this phone's storage and is never uploaded.
+   ------------------------------------------------------------------ */
+var IMPORT_KEY="fieldmap.imports.v2";
+var IMPORT_OLD="fieldmap.custom.v1";   /* the single-file version */
+
+/* Bold and far apart, so two sets never read as one. */
+var IMPORT_COLORS=["#E5007D","#0B84F3","#14A54A","#FF7A00",
+                   "#8E44D0","#00A6A6","#E03131","#B8860B"];
+var IMPORTS=[];
+
+function importsSave(){
+  try{
+    localStorage.setItem(IMPORT_KEY,JSON.stringify(IMPORTS.map(function(x){
+      return {id:x.id,name:x.name,color:x.color,on:x.on,geojson:x.geojson};
+    })));
+    return true;
+  }catch(e){ return false; }
 }
-function customStore(o){
-  try{localStorage.setItem(CUSTOM_KEY,JSON.stringify(o));return true;}catch(e){return false;}
+function importsLoad(){
+  var list=[];
+  try{ list=JSON.parse(localStorage.getItem(IMPORT_KEY))||[]; }catch(e){ list=[]; }
+  if(!list.length){
+    try{
+      var old=JSON.parse(localStorage.getItem(IMPORT_OLD));
+      if(old&&old.geojson&&old.geojson.features&&old.geojson.features.length)
+        list=[{id:"imp1",name:old.name||"Imported",color:IMPORT_COLORS[0],
+               on:true,geojson:old.geojson}];
+    }catch(e){}
+  }
+  return list;
 }
-function customBlank(L){
-  var el=document.getElementById(L.src);
-  el.textContent="No file loaded";
-  el.classList.add("miss");
-  var ck=document.getElementById(L.check);
-  if(ck){ ck.checked=false; ck.disabled=true; }
+function importColor(){
+  var used={}; IMPORTS.forEach(function(x){used[x.color]=1;});
+  for(var i=0;i<IMPORT_COLORS.length;i++)
+    if(!used[IMPORT_COLORS[i]])return IMPORT_COLORS[i];
+  return IMPORT_COLORS[IMPORTS.length%IMPORT_COLORS.length];
 }
-function customBoot(L){
-  var saved=customLoad();
-  if(saved&&saved.geojson&&saved.geojson.features&&saved.geojson.features.length)
-    customApply(L,saved.geojson,saved.name,false);
-  else customBlank(L);
+function importDraw(set){
+  var sid="imp-"+set.id, vis=set.on?"visible":"none";
+  var lab=["coalesce",["get","label"],["get","name"],""];
+  if(!map.getSource(sid))
+    map.addSource(sid,{type:"geojson",data:set.geojson,tolerance:0,buffer:64,maxzoom:16});
+  else map.getSource(sid).setData(set.geojson);
+  if(map.getLayer(sid+"-f"))return;
+  addLayerSafe({id:sid+"-l",type:"line",source:sid,layout:{visibility:vis},
+    filter:["!=",["geometry-type"],"Point"],
+    paint:{"line-color":set.color,"line-width":2}});
+  addLayerSafe({id:sid+"-f",type:"circle",source:sid,layout:{visibility:vis},
+    filter:["==",["geometry-type"],"Point"],
+    paint:{"circle-radius":11,"circle-color":set.color,
+           "circle-stroke-width":2.2,"circle-stroke-color":"#FFFFFF"}});
+  addLayerSafe({id:sid+"-t",type:"symbol",source:sid,
+    filter:["all",["==",["geometry-type"],"Point"],["<=",["length",lab],3]],
+    layout:{visibility:vis,"text-field":lab,"text-size":13,"text-anchor":"center",
+      "text-allow-overlap":true,"text-ignore-placement":true,
+      "text-font":["Noto Sans Bold"]},
+    paint:{"text-color":"#FFFFFF"}});
+  addLayerSafe({id:sid+"-t2",type:"symbol",source:sid,minzoom:10,
+    filter:["all",["==",["geometry-type"],"Point"],[">",["length",lab],3]],
+    layout:{visibility:vis,"text-field":lab,"text-size":12,"text-offset":[0,1.2],
+      "text-anchor":"top","text-allow-overlap":false},
+    paint:{"text-color":"#2E2A20","text-halo-color":"rgba(255,255,255,.95)",
+           "text-halo-width":2}});
 }
-function customApply(L,geoj,fname,persist){
-  if(map.getSource(L.id))map.getSource(L.id).setData(geoj);
-  else build(L,geoj);
-  loaded[L.id]=true;
-  RAW[L.id]=geoj;
-  var n=geoj.features.length;
-  var el=document.getElementById(L.src);
-  el.classList.remove("miss");
-  el.textContent=n.toLocaleString()+(n===1?" feature":" features")+(fname?" · "+fname:"");
-  var ck=document.getElementById(L.check);
-  ck.disabled=false; ck.checked=true;
-  setVisible(L,true);
-  if(persist&&!customStore({name:fname||"",savedAt:Date.now(),geojson:geoj}))
+function importVisible(set){
+  ["-f","-l","-t","-t2"].forEach(function(sfx){
+    var id="imp-"+set.id+sfx;
+    if(map.getLayer(id))map.setLayoutProperty(id,"visibility",set.on?"visible":"none");
+  });
+}
+function importDrop(id){
+  var i=IMPORTS.map(function(x){return x.id;}).indexOf(id);
+  if(i<0)return;
+  ["-f","-l","-t","-t2"].forEach(function(sfx){
+    if(map.getLayer("imp-"+id+sfx))map.removeLayer("imp-"+id+sfx);
+  });
+  if(map.getSource("imp-"+id))map.removeSource("imp-"+id);
+  IMPORTS.splice(i,1); importsSave(); importRows();
+}
+function importRows(){
+  var el=document.getElementById("imports");
+  if(!el)return;
+  if(!IMPORTS.length){
+    el.innerHTML='<div style="padding:14px 0;border-top:1px solid var(--basalt2);'+
+      'font-size:13px;color:var(--sage)">Nothing loaded yet.</div>';
+    return;
+  }
+  el.innerHTML=IMPORTS.map(function(x){
+    var n=(x.geojson.features||[]).length;
+    return '<div class="layer">'+
+      '<span class="swatch" style="background:'+x.color+'"></span>'+
+      '<span class="txt"><span class="nm">'+esc(x.name)+'</span>'+
+      '<span class="src">'+n.toLocaleString()+(n===1?" feature":" features")+'</span></span>'+
+      '<button data-impdel="'+x.id+'" style="border:none;background:var(--basalt2);'+
+        'color:var(--sage);border-radius:9px;padding:9px 12px;font:inherit;'+
+        'font-size:13px;cursor:pointer;margin-right:10px">Remove</button>'+
+      '<span class="sw"><input type="checkbox" data-impck="'+x.id+'"'+
+        (x.on?" checked":"")+'><i></i></span></div>';
+  }).join("");
+  el.querySelectorAll("[data-impck]").forEach(function(b){
+    b.onchange=function(){
+      var set=IMPORTS.filter(function(x){return x.id===b.dataset.impck;})[0];
+      if(!set)return;
+      set.on=b.checked; importVisible(set); importsSave();
+    };
+  });
+  el.querySelectorAll("[data-impdel]").forEach(function(b){
+    b.onclick=function(){
+      if(b.dataset.sure!=="1"){
+        b.dataset.sure="1"; b.textContent="Sure?";
+        setTimeout(function(){if(b.dataset.sure==="1"){b.dataset.sure="";b.textContent="Remove";}},4000);
+        return;
+      }
+      importDrop(b.dataset.impdel);
+      toast("Removed. The file on your phone is untouched.");
+    };
+  });
+}
+function importAdd(geoj,fname){
+  var base=String(fname||"Imported").replace(/\.(geo)?json$/i,"");
+  var set={id:"i"+Date.now().toString(36)+Math.floor(Math.random()*1e3).toString(36),
+           name:base,color:importColor(),on:true,geojson:geoj};
+  IMPORTS.push(set); importDraw(set); importRows();
+  if(!importsSave())
     toast("Loaded, but too big to keep. It will be gone next time you open the app.");
+}
+function importBoot(){
+  IMPORTS=importsLoad().map(function(x){
+    if(!x.color)x.color=IMPORT_COLORS[0];
+    if(x.on===undefined)x.on=true;
+    return x;
+  });
+  IMPORTS.forEach(importDraw);
+  importRows();
 }
 function customPopup(p){
   p=p||{};
@@ -1012,44 +1109,36 @@ function customPopup(p){
   return "<h3>"+esc(title)+"</h3>"+
     '<p class="kicker">From your imported file</p>'+rows(list);
 }
-
 (function importWiring(){
-  var L=LAYERS.filter(function(x){return x.id==="custom";})[0];
   var pick=document.getElementById("imp-pick");
   var file=document.getElementById("imp-file");
-  var clear=document.getElementById("imp-clear");
-  if(!L||!pick||!file||!clear)return;
-
+  if(!pick||!file)return;
   pick.onclick=function(){ file.value=""; file.click(); };
-
   file.onchange=function(){
-    var f=file.files&&file.files[0];
-    if(!f)return;
-    var rd=new FileReader();
-    rd.onerror=function(){ toast("Could not read that file."); };
-    rd.onload=function(){
-      var g;
-      try{ g=JSON.parse(rd.result); }
-      catch(err){ toast("That file is not readable as GeoJSON."); return; }
-      if(g&&g.type==="Feature")g={type:"FeatureCollection",features:[g]};
-      if(!g||g.type!=="FeatureCollection"||!g.features||!g.features.length){
-        toast("No features found in that file."); return;
-      }
-      customApply(L,g,f.name,true);
-      toast(g.features.length+" loaded from "+f.name);
-    };
-    rd.readAsText(f);
-  };
-
-  clear.onclick=function(){
-    try{ localStorage.removeItem(CUSTOM_KEY); }catch(e){}
-    if(map.getSource(L.id))
-      map.getSource(L.id).setData({type:"FeatureCollection",features:[]});
-    loaded[L.id]=false;
-    customBlank(L);
-    toast("Imported points removed.");
+    var files=Array.prototype.slice.call(file.files||[]);
+    if(!files.length)return;
+    var done=0, added=0;
+    files.forEach(function(f){
+      var rd=new FileReader();
+      rd.onerror=function(){ done++; toast("Could not read "+f.name+"."); };
+      rd.onload=function(){
+        done++;
+        var g;
+        try{ g=JSON.parse(rd.result); }
+        catch(err){ toast(f.name+" is not readable as GeoJSON."); return; }
+        if(g&&g.type==="Feature")g={type:"FeatureCollection",features:[g]};
+        if(!g||g.type!=="FeatureCollection"||!g.features||!g.features.length){
+          toast("No features found in "+f.name+"."); return;
+        }
+        importAdd(g,f.name); added++;
+        if(done===files.length&&added)
+          toast(added===1?("Loaded "+f.name):(added+" files loaded"));
+      };
+      rd.readAsText(f);
+    });
   };
 })();
+
 
 /* Each gem category is fed by two files - DOGAMI's occurrences and your
    own field sites - and both want to write the same line in the layer
@@ -1319,37 +1408,6 @@ function build(L,geoj){
     tolerance:0, buffer:64, maxzoom:16});
   var vis=L.defaultOn?"visible":"none";
 
-  if(L.custom){
-    addLayerSafe({id:L.id+"-f",type:"circle",source:L.srcId,layout:{visibility:vis},
-      filter:["==",["geometry-type"],"Point"],
-      paint:{"circle-radius":11,
-             "circle-color":["case",["==",["get","status"],"known deposit"],"#5C5548","#E5007D"],
-             "circle-stroke-width":2.2,"circle-stroke-color":"#FFFFFF"}});
-    addLayerSafe({id:L.id+"-l",type:"line",source:L.srcId,layout:{visibility:vis},
-      filter:["!=",["geometry-type"],"Point"],
-      paint:{"line-color":"#E5007D","line-width":2}});
-    /* short labels — a rank number — sit inside the dot and never hide */
-    addLayerSafe({id:L.id+"-t",type:"symbol",source:L.srcId,
-      filter:["all",["==",["geometry-type"],"Point"],
-              ["<=",["length",["coalesce",["get","label"],["get","name"],""]],3]],
-      layout:{visibility:vis,
-        "text-field":["coalesce",["get","label"],["get","name"],""],
-        "text-size":13,"text-anchor":"center","text-allow-overlap":true,
-        "text-ignore-placement":true,
-        "text-font":["Noto Sans Bold"]},
-      paint:{"text-color":"#FFFFFF"}});
-    /* anything longer is written beside the dot instead */
-    addLayerSafe({id:L.id+"-t2",type:"symbol",source:L.srcId,minzoom:10,
-      filter:[">",["length",["coalesce",["get","label"],["get","name"],""]],3],
-      layout:{visibility:vis,
-        "text-field":["coalesce",["get","label"],["get","name"],""],
-        "text-size":12,"text-offset":[0,1.2],"text-anchor":"top",
-        "text-allow-overlap":false},
-      paint:{"text-color":"#7A0044","text-halo-color":"rgba(255,255,255,.95)",
-             "text-halo-width":2}});
-    return;
-  }
-
   if(L.rh){
     /* Field sites. Drawn a touch larger than the agency records so the
        two read apart at a glance, and driven by your marks: a favourite
@@ -1467,24 +1525,33 @@ map.on("click",function(e){
     if(!loaded[L.id])return;
     var ckEl=document.getElementById(L.check);
     if(!ckEl||!ckEl.checked)return;
-    if(L.custom){
-      if(map.getLayer(L.id+"-f"))ids.push(L.id+"-f");
-      if(map.getLayer(L.id+"-l"))ids.push(L.id+"-l");
-      return;
-    }
     if(map.getLayer(L.id+"-f"))ids.push(L.id+"-f");
     else if(map.getLayer(L.id+"-l"))ids.push(L.id+"-l");
   });
+  /* imported sets are not in LAYERS - they come and go at runtime */
+  IMPORTS.forEach(function(st){
+    if(!st.on)return;
+    ["-f","-l"].forEach(function(sfx){
+      if(map.getLayer("imp-"+st.id+sfx))ids.push("imp-"+st.id+sfx);
+    });
+  });
+
   if(!ids.length)return;
 
   var hits=map.queryRenderedFeatures(box,{layers:ids});
   if(!hits.length)return;
 
-  var order={custom:-1,claims:0,sma:2};
+  var order={__import:-1,claims:0,sma:2};
   var items=[];
   var seen={};
   hits.forEach(function(f){
     var lid=f.layer.id.replace(/-(f|l)$/,"");
+    if(lid.indexOf("imp-")===0){
+      var k0=lid+":"+JSON.stringify(f.properties).slice(0,80);
+      if(seen[k0])return; seen[k0]=true;
+      items.push({lid:"__import",props:f.properties});
+      return;
+    }
     var key=lid+":"+(f.properties.OBJECTID||f.properties.ID||JSON.stringify(f.properties).slice(0,80));
     if(seen[key])return; seen[key]=true;
     items.push({lid:lid,props:f.properties});
@@ -1494,7 +1561,8 @@ map.on("click",function(e){
   var i=0;
   function render(){
     var it=items[i];
-    var L=LAYERS.filter(function(x){return x.id===it.lid;})[0];
+    var L=(it.lid==="__import")?{popup:customPopup}
+         :LAYERS.filter(function(x){return x.id===it.lid;})[0];
     var head="";
     if(items.length>1){
       head='<div class="nav"><span>'+(i+1)+" of "+items.length+" here</span>"+
@@ -1623,7 +1691,7 @@ document.getElementById("gobtn").onclick=function(){
 function openSheet(){
   document.getElementById("sheet-layers").classList.add("open");
   document.getElementById("btn-layers").classList.add("active");
-  usage();renderAreas();wpRefresh();
+  usage();renderAreas();wpRefresh();importRows();
   checkSpace().then(estimate);
 }
 function closeSheets(){
