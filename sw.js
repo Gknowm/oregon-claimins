@@ -11,7 +11,7 @@
    That is what tells phones to pick up the new copy.
 ------------------------------------------------------------------ */
 
-const SHELL_VERSION = 6;
+const SHELL_VERSION = 7;
 const SHELL_CACHE = "oregon-shell-v" + SHELL_VERSION;
 const TILE_CACHE  = "oregon-tiles-v1";  // must match TILE_CACHE in index.html
 

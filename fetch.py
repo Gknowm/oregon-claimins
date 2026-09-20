@@ -72,7 +72,13 @@ MILO_URL = ("https://gis.dogami.oregon.gov/arcgis/rest/services/"
 CLAIMS_URL = ("https://gis.blm.gov/nlsdb/rest/services/HUB/"
               "BLM_Natl_MLRS_Mining_Claims_Not_Closed/FeatureServer/0/query")
 
-MILO_KEEP = ["SiteName", "Commodity", "CommodityAbreviation", "CommoditiesProduced",
+# MILO v3 misspelled this field as "CommodityAbreviation", one b. Release 4
+# corrected it to "CommodityAbbreviation". Both are listed so the file works
+# against either release. This is the field that carries the actual mineral -
+# Commodity only ever says "gemstone material" - so losing it collapses every
+# gem into one category and hides the sunstone records entirely.
+MILO_KEEP = ["SiteName", "Commodity", "CommodityAbbreviation",
+             "CommodityAbreviation", "CommoditiesProduced",
              "Type", "DepositType", "OreMaterial", "WorkingsType",
              "WorkingsDescription", "YearOfDiscovery", "ElevationFeet", "Owner",
              "County", "Township", "Range", "Section", "TopoMap24k", "TopoMap100k",
@@ -132,7 +138,7 @@ def classify(props):
     "Gold Sheen" that say nothing about what is in them.
     """
     text = " ".join(str(props.get(f) or "") for f in
-                    ("CommodityAbreviation", "Commodity",
+                    ("CommodityAbbreviation", "CommodityAbreviation", "Commodity",
                      "CommoditiesProduced", "OreMaterial")).lower()
     if not text.strip():
         return None, None
@@ -274,15 +280,37 @@ def main():
         f["properties"]["_grp"] = grp
         kept.append(f)
 
-    # If MILO-4 renamed its fields, the allow-list above would quietly throw
-    # everything away. Say so rather than writing a file full of empty records.
-    if kept:
-        avg = sum(len(f["properties"]) for f in kept) / len(kept)
-        if avg < 4:
-            print("    WARNING: records are coming through nearly empty, so the")
-            print("    field names in MILO_KEEP probably changed in release 4.")
-            print("    Open the service in a browser to see the current names:")
-            print("    " + MILO_URL.replace("/query", "?f=pjson"))
+    # Check every name in MILO_KEEP against what the server actually returned.
+    #
+    # The old version of this guard averaged how many properties survived and
+    # complained only if the average fell below four. That cannot catch a
+    # single renamed field: v4 corrected CommodityAbreviation to
+    # CommodityAbbreviation, 27 of 28 names still matched, the average stayed
+    # high, and the one field carrying the mineral name vanished in silence.
+    # Every gem collapsed into gem_other and the sunstone records disappeared.
+    #
+    # So: name the fields that never appeared. Some are legitimately absent
+    # because no record in the box fills them, which is why this reports
+    # rather than fails - but a renamed field shows up here by name.
+    seen = set()
+    for f in raw:
+        seen.update((f.get("properties") or {}).keys())
+    absent = [f for f in MILO_KEEP if f not in seen]
+    if absent:
+        print(f"    NOTE: {len(absent)} field(s) in MILO_KEEP never appeared:")
+        print("      " + ", ".join(absent))
+        print("    Either no record in the box fills them, or MILO renamed")
+        print("    them. Check the current names at:")
+        print("    " + MILO_URL.replace("/query", "?f=pjson"))
+
+    # The mineral name specifically. Commodity only ever says "gemstone
+    # material", so if this field is missing the map still draws points but
+    # every one of them reads as a generic gem.
+    if kept and not any("CommodityAbbreviation" in f["properties"]
+                        or "CommodityAbreviation" in f["properties"]
+                        for f in kept):
+        print("    WARNING: no record carries a commodity abbreviation, so the")
+        print("    gem categories below are meaningless. Fix before shipping.")
 
     path = os.path.join(DATA, "milo.geojson")
     with open(path, "w") as fh:

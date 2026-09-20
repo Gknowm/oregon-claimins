@@ -632,7 +632,8 @@ var MILO_RADIUS=["interpolate",["linear"],["zoom"],
 function miloPopup(p){
   var name=first(p,"SiteName");
   if(!name||/^unnamed/i.test(name))name="Unnamed occurrence";
-  var mineral=first(p,"CommodityAbreviation");
+  /* v3 spelled this with one b; v4 corrected it. Accept either. */
+  var mineral=first(p,"CommodityAbbreviation","CommodityAbreviation");
   var html="<h3>"+esc(name)+"</h3>";
   var kick=[CAT_LABEL[first(p,"_cat")]||mineral||first(p,"Commodity"),
             first(p,"WorkingsType")].filter(Boolean).join(" &middot; ");
