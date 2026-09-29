@@ -1988,16 +1988,28 @@ LAYERS.forEach(function(L){
     return GEMS.map(function(g){return document.getElementById("ck-"+g.cat);})
                .filter(Boolean);
   }
+  /* Each category switch reports back to this one when it changes. While
+     this switch is flipping all of them, that report-back has to wait:
+     otherwise the first category to turn off sees the rest still on,
+     sets this switch back to on, and every later category is skipped -
+     one tap per gem. So: read the target once, flip everything, then
+     settle this switch a single time at the end. */
+  var bulk=false;
   master.addEventListener("change",function(){
+    var want=master.checked;
+    bulk=true;
     boxes().forEach(function(b){
       if(b.disabled)return;
-      if(b.checked!==master.checked){
-        b.checked=master.checked;
+      if(b.checked!==want){
+        b.checked=want;
         b.dispatchEvent(new Event("change"));
       }
     });
+    bulk=false;
+    window.__syncAllGems();
   });
   window.__syncAllGems=function(){
+    if(bulk)return;
     var b=boxes().filter(function(x){return !x.disabled;});
     if(!b.length)return;
     var on=b.filter(function(x){return x.checked;}).length;
