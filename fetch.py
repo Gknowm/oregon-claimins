@@ -1,32 +1,34 @@
 #!/usr/bin/env python3
 """
-Fills in everything the Oregon map needs. Run it once:
+Fills in everything the field map needs. Run it once:
 
     python3 fetch.py
 
-Covers east of the Cascade crest. Two layers:
+Covers two objectives only, sunstone and placer gold, in 15 small zones
+(see ZONES below) instead of the whole state. Each zone is a box about
+5 km out from every target point in it; where two boxes touched they
+were merged, so no ground is fetched twice.
 
-  1. Gem and rockhounding occurrences from DOGAMI MILO release 4.
-     Filtered to gem categories - no metals, no gravel, no coal.
-     That filter is real: MILO records a commodity.
+Inside each zone, three layers, all unfiltered:
 
-  2. BLM mining claims. Every claim in the box, unfiltered.
-     There is no commodity filter here and there cannot be one. BLM
-     records no commodity for a claim, so any "gem claims only" rule
-     would be a geographic guess wearing a filter's clothes. What is
-     in the box is in the file; if a claim is missing, it is outside
-     the box, and that is the only reason.
+  1. DOGAMI MILO release 4, every commodity - gold, silver and other
+     metals as well as gems. Placer ground needs the gold records and
+     the mercury and silver around them.
 
-To read commodity onto a claim, look at the gem occurrences sitting on
-or beside it. The map tallies those in the claim popup.
+  2. BLM mining claims, every open case in the zone. There is no commodity
+     filter and there cannot be one: BLM records no commodity for a claim.
+
+  3. DOGAMI OGDC-6 geology, every map unit, cut to the zone edge. The old
+     statewide file kept only the eleven units that host agate and opal,
+     which left the Picture Gorge basalts out of every sunstone zone.
+
+Outside the zones there is no claim, MILO or geology data at all. Your
+field sites file (data/rockhounding.geojson) is not touched by this script
+and stays statewide.
 
 To check the sources are alive without downloading anything:
 
     python3 fetch.py --check
-
-To add gold and other metal occurrences later, set GOLD = True below.
-That affects MILO only - claims are already unfiltered. The map has the
-Metals layer built in and empty until then.
 
 Needs Python 3.8 or newer. No extra packages.
 """
@@ -42,18 +44,35 @@ import urllib.request
 # SETTINGS you might want to change.
 # ----------------------------------------------------------------------
 
-# Include gold and other metals? Off for now. Flip to True and re-run to
-# add them; nothing else needs changing.
-GOLD = False
+# Include gold and other metals. On: half of this map is placer gold.
+GOLD = True
 
-# The ground to pull, as west, south, east, north.
-# The whole state, coast to Idaho. This used to stop at the Cascade crest
-# to keep the Josephine and Jackson gold districts out, because they are
-# the claim-densest ground in Oregon and the claims file was polygons.
-# Claims are cells now, so those districts cost a few hundred cells
-# instead of a few megabytes, and the west side carries the Holley Blue
-# and Umpqua carnelian country that the old box cut off.
-BBOX = (-124.80, 41.90, -116.40, 46.30)
+# The ground to pull. Each zone is (objective, name, west, south, east,
+# north). Boxes run about 5 km out from each target point; points whose
+# boxes touched were merged into one zone, and the merge was repeated
+# until no two zones overlap.
+#
+# Only boxes are stored here, never the points themselves - this file can
+# sit in a public repo without giving away where the targets are.
+#
+# To add a zone, add a line. To drop one, delete its line and re-run.
+ZONES = [
+    ("placer",   "Upper Big Creek",             (-118.848, 44.745, -118.722, 44.835)),
+    ("placer",   "Ochoco Creek",                (-120.503, 44.335, -120.269, 44.485)),
+    ("placer",   "Dixie / Quartzburg",          (-118.763, 44.465, -118.507, 44.643)),
+    ("placer",   "Fox / Mine Creek",            (-119.231, 44.500, -119.097, 44.623)),
+    ("placer",   "Elk Creek",                   (-118.863, 44.647, -118.737, 44.737)),
+    ("placer",   "Spanish Gulch",               (-119.833, 44.400, -119.621, 44.580)),
+    ("sunstone", "Silvies / West Myrtle Butte", (-119.233, 43.943, -119.014, 44.144)),
+    ("sunstone", "NE Oregon",                   (-117.650, 45.108, -117.522, 45.199)),
+    ("sunstone", "Silvies west",                (-119.883, 44.155, -119.717, 44.275)),
+    ("sunstone", "Warner",                      (-120.073, 42.623, -119.945, 42.721)),
+    ("sunstone", "Harney",                      (-120.004, 43.086, -119.880, 43.176)),
+    ("sunstone", "Ponderosa",                   (-119.588, 43.811, -119.364, 43.964)),
+    ("sunstone", "Silvies east",                (-118.905, 43.868, -118.781, 43.959)),
+    ("sunstone", "Dust Devil",                  (-119.927, 42.669, -119.805, 42.759)),
+    ("sunstone", "Plush",                       (-119.957, 42.779, -119.834, 42.870)),
+]
 
 # ----------------------------------------------------------------------
 
@@ -78,43 +97,11 @@ CLAIMS_URL = ("https://gis.blm.gov/nlsdb/rest/services/HUB/"
 GEOLOGY_URL = ("https://gis.dogami.oregon.gov/arcgis/rest/services/"
                "Public/OGDC6/MapServer/2/query")
 
-# Only the units that actually produce. These were not guessed - they come
-# from asking which map units are over-represented among MILO's agate,
-# thunderegg and opal occurrences, measured against ALL MILO occurrences
-# in the same unit rather than against unit area. Normalising that way
-# controls for where people have looked, which is the confound that sank
-# earlier attempts at geology filtering.
-#
-#   Eastern tholeiitic lavas          20 of 26 occurrences are agate  77%
-#   Tuff of Birch Creek                5 of 8                         63%
-#   Leslie Gulch Ash-flow Tuff        43 of 69                        62%
-#   High-silica rhyolite domes         7 of 12                        58%
-#   Volcanic mud flow breccia          7 of 15                        47%
-#   Lower tuffaceous sedimentary      19 of 90                        21%
-#   John Day Formation                18 of 117                       15%
-#
-# Thundereggs sit on the silicic half - rhyolite flows and domes at 67%,
-# rhyolitic flows at 43% - which is why both sets are here. Agate fills
-# cavities in basalt flow tops; thundereggs form in silicic domes. Same
-# mineral, different rock.
-#
-# What this cannot tell you is where nobody has looked. A unit with no
-# recorded occurrences reads as barren here whether it is barren or
-# simply unwalked.
-GEOLOGY_UNITS = [
-    "Eastern tholeiitic lavas",
-    "Tuff of Birch Creek",
-    "Leslie Gulch Ash-flow Tuff",
-    "High-silica rhyolite domes and shallow intrusions",
-    "Volcanic mud flow breccia",
-    "Lower tuffaceous sedimentary rocks",
-    "John Day Formation",
-    "Rhyolite flows and domes",
-    "Rhyolitic flows",
-    "Clarno Formation",
-    "Porphyritic rhyolite",
-]
-
+# Every map unit in each zone is kept. The statewide map kept only the
+# eleven units MILO showed hosting agate, thundereggs and opal; that list
+# held no basalt the sunstone comes from and none of the gravels and
+# intrusives placer gold comes from. Inside a few small zones there is no
+# size reason to filter, so nothing is.
 GEOLOGY_KEEP = ["MAP_UNIT_N", "MAP_UNIT_L", "AGE_NAME", "G_ROCK_TYP",
                 "LITH_GEN_U", "TERRANE_GR", "FORMATION", "MEMBER",
                 "Citation", "Link"]
@@ -152,9 +139,12 @@ CLAIMS_KEEP = ["OBJECTID", "CSE_NAME", "CSE_NR", "CSE_TYPE_NR", "CSE_DISP",
 # smaller file, or 0.005 for finer ground and a bigger one.
 CLAIM_CELL = 0.01
 
-# Also write the full claim polygons to data/claims-detail.geojson.
-# Off by default - that file is the 10 MB one.
-CLAIM_DETAIL = False
+# Also write the full claim polygons to data/claims-detail.geojson, with
+# each claim's name, serial number and type. Statewide this was the 10 MB
+# file; inside the zones it is small, so it is on. The app does not read
+# it yet - claims.geojson (cells) keeps the current app working until the
+# app is updated to draw real outlines.
+CLAIM_DETAIL = True
 
 PRECISION = 5   # about a metre - finer than the survey grid this comes from
 
@@ -314,6 +304,71 @@ def claim_bbox(geom):
     return b if b[0] <= b[2] else None
 
 
+def clip_ring(ring, box):
+    """Cut one polygon ring to a rectangle (Sutherland-Hodgman)."""
+    w, s, e, n = box
+    edges = ((lambda p: p[0] >= w, lambda a, b: _at_x(a, b, w)),
+             (lambda p: p[0] <= e, lambda a, b: _at_x(a, b, e)),
+             (lambda p: p[1] >= s, lambda a, b: _at_y(a, b, s)),
+             (lambda p: p[1] <= n, lambda a, b: _at_y(a, b, n)))
+    pts = ring[:-1] if len(ring) > 1 and ring[0] == ring[-1] else ring[:]
+    for inside, cross in edges:
+        if not pts:
+            break
+        out = []
+        prev = pts[-1]
+        for cur in pts:
+            if inside(cur):
+                if not inside(prev):
+                    out.append(cross(prev, cur))
+                out.append(cur)
+            elif inside(prev):
+                out.append(cross(prev, cur))
+            prev = cur
+        pts = out
+    if len(pts) < 3:
+        return None
+    return pts + [pts[0]]
+
+
+def _at_x(a, b, x):
+    t = (x - a[0]) / (b[0] - a[0])
+    return [x, a[1] + t * (b[1] - a[1])]
+
+
+def _at_y(a, b, y):
+    t = (y - a[1]) / (b[1] - a[1])
+    return [a[0] + t * (b[0] - a[0]), y]
+
+
+def clip_geom(geom, box):
+    """Cut a Polygon or MultiPolygon to a rectangle. None if nothing left.
+
+    Geology polygons can run a hundred kilometres past a zone. Cutting
+    them at the zone edge is what keeps the file small, and it is what
+    makes 'no geology outside the zones' literally true.
+    """
+    if not geom:
+        return None
+    t = geom.get("type")
+    polys = ([geom["coordinates"]] if t == "Polygon"
+             else geom["coordinates"] if t == "MultiPolygon" else [])
+    kept = []
+    for poly in polys:
+        if not poly:
+            continue
+        outer = clip_ring(poly[0], box)
+        if not outer:
+            continue
+        holes = [h for h in (clip_ring(r, box) for r in poly[1:]) if h]
+        kept.append([outer] + holes)
+    if not kept:
+        return None
+    if len(kept) == 1:
+        return {"type": "Polygon", "coordinates": kept[0]}
+    return {"type": "MultiPolygon", "coordinates": kept}
+
+
 def aggregate_claims(features, cell):
     """Collapse claim polygons into a grid of cells.
 
@@ -411,7 +466,7 @@ def check():
         print("agency moved the service — find the new address in their REST")
         print("directory and update the url near the top of this file.")
     else:
-        print("Both sources are live.")
+        print("All three sources are live.")
     return 1 if bad else 0
 
 
@@ -427,76 +482,105 @@ def vendor():
             fh.write(get(url))
 
 
+def fetch_zones(url, page, label, where="1=1"):
+    """Query every zone. Returns a list of (zone index, raw features)."""
+    out = []
+    for i, (kind, name, box) in enumerate(ZONES):
+        out.append((i, query(url, box, page, f"{label} {name}:", where=where)))
+    return out
+
+
+def fid(f, *fields):
+    """A stable identity for de-duplicating features that sit in two zones."""
+    if f.get("id") is not None:
+        return ("id", f["id"])
+    p = f.get("properties") or {}
+    return tuple(p.get(k) for k in fields) or None
+
+
 def main():
     if "--check" in sys.argv:
         return check()
 
     os.makedirs(DATA, exist_ok=True)
-    print(f"Box: {BBOX}")
-    print(f"Occurrences: gem categories{' plus gold and metals' if GOLD else ' only'}.")
-    print("Claims: everything in the box, unfiltered.\n")
+    print(f"{len(ZONES)} zones: "
+          f"{sum(z[0] == 'placer' for z in ZONES)} placer, "
+          f"{sum(z[0] == 'sunstone' for z in ZONES)} sunstone")
+    print("Occurrences, claims and geology: everything inside the zones, "
+          "nothing outside.\n")
 
     print("Map library")
     vendor()
 
+    per_zone = [{"milo": 0, "claims": 0, "geology": 0} for _ in ZONES]
+
     # ---- occurrences -------------------------------------------------
     print("\nMineral occurrences")
-    print("  Oregon DOGAMI, Mineral Information Layer (MILO)")
+    print("  Oregon DOGAMI, Mineral Information Layer (MILO), every commodity")
     try:
-        raw = query(MILO_URL, BBOX, 1000, "MILO")
+        batches = fetch_zones(MILO_URL, 1000, "MILO")
     except Exception as exc:
         print(f"    could not download: {exc}")
         print("    Run  python3 fetch.py --check  to see if the source is down.")
         return 1
 
     wanted = set(GEM_CATS) | ({"gold", "silver", "metal"} if GOLD else set())
-    kept = []
-    for f in raw:
-        f = slim(f, set(MILO_KEEP))
-        cat, grp = classify(f["properties"])
-        if cat not in wanted:
-            continue
-        f["properties"]["_cat"] = cat
-        f["properties"]["_grp"] = grp
-        kept.append(f)
+    kept, seen_ids, raw_all, unclassified = [], set(), [], 0
+    dropped = {}
+    for i, raw in batches:
+        raw_all.extend(raw)
+        for f in raw:
+            key = fid(f, "MILO_ID", "SiteName")
+            if key in seen_ids:
+                continue
+            seen_ids.add(key)
+            f = slim(f, set(MILO_KEEP))
+            cat, grp = classify(f["properties"])
+            if cat not in wanted:
+                unclassified += 1
+                p = f["properties"]
+                what = " / ".join(str(p.get(k)) for k in
+                                  ("CommodityAbbreviation", "Commodity")
+                                  if p.get(k)) or "(no commodity recorded)"
+                dropped[what] = dropped.get(what, 0) + 1
+                continue
+            f["properties"]["_cat"] = cat
+            f["properties"]["_grp"] = grp
+            kept.append(f)
+            per_zone[i]["milo"] += 1
 
-    # Check every name in MILO_KEEP against what the server actually returned.
-    #
-    # The old version of this guard averaged how many properties survived and
-    # complained only if the average fell below four. That cannot catch a
-    # single renamed field: v4 corrected CommodityAbreviation to
-    # CommodityAbbreviation, 27 of 28 names still matched, the average stayed
-    # high, and the one field carrying the mineral name vanished in silence.
-    # Every gem collapsed into gem_other and the sunstone records disappeared.
-    #
-    # So: name the fields that never appeared. Some are legitimately absent
-    # because no record in the box fills them, which is why this reports
-    # rather than fails - but a renamed field shows up here by name.
+    # Name every field in MILO_KEEP that never came back. A renamed field
+    # shows up here by name instead of vanishing in silence - that is how
+    # CommodityAbreviation -> CommodityAbbreviation was caught.
     seen = set()
-    for f in raw:
+    for f in raw_all:
         seen.update((f.get("properties") or {}).keys())
     absent = [f for f in MILO_KEEP if f not in seen]
     if absent:
         print(f"    NOTE: {len(absent)} field(s) in MILO_KEEP never appeared:")
         print("      " + ", ".join(absent))
-        print("    Either no record in the box fills them, or MILO renamed")
+        print("    Either no record in the zones fills them, or MILO renamed")
         print("    them. Check the current names at:")
         print("    " + MILO_URL.replace("/query", "?f=pjson"))
 
-    # The mineral name specifically. Commodity only ever says "gemstone
-    # material", so if this field is missing the map still draws points but
-    # every one of them reads as a generic gem.
     if kept and not any("CommodityAbbreviation" in f["properties"]
                         or "CommodityAbreviation" in f["properties"]
                         for f in kept):
         print("    WARNING: no record carries a commodity abbreviation, so the")
-        print("    gem categories below are meaningless. Fix before shipping.")
+        print("    categories below are meaningless. Fix before shipping.")
 
     path = os.path.join(DATA, "milo.geojson")
     with open(path, "w") as fh:
         json.dump({"type": "FeatureCollection", "features": kept}, fh)
-    print(f"    {len(raw):,} records in box -> {len(kept):,} kept, "
-          f"{os.path.getsize(path)/1048576:.1f} MB")
+    print(f"    {len(seen_ids):,} records in zones -> {len(kept):,} kept, "
+          f"{os.path.getsize(path)/1048576:.2f} MB")
+    if unclassified:
+        print(f"    {unclassified:,} had no commodity the classifier knows "
+              "and were left out. What they say:")
+        for w in sorted(dropped, key=lambda k: -dropped[k])[:15]:
+            print(f"      {dropped[w]:>4}  {w[:70]}")
+        if len(dropped) > 15:
+            print(f"      ... and {len(dropped) - 15} more kinds")
 
     tally = {}
     for f in kept:
@@ -505,28 +589,30 @@ def main():
     for c in sorted(tally, key=lambda k: -tally[k]):
         print(f"      {c:<12} {tally[c]:,}")
 
-    # ---- claims: everything in the box ------------------------------
-    # No filter. Not by commodity (BLM records none), not by distance to
-    # anything. What is in the box is in the file. If a claim is missing
-    # it is because it is outside the box, and nothing else.
+    # ---- claims: everything in the zones ----------------------------
     print("\nMining claims")
     print("  BLM Mineral and Land Records System, cases not closed")
-    print("  Every claim in the box, whatever it is staked for.")
     try:
-        raw = query(CLAIMS_URL, BBOX, 1000, "claims")
+        batches = fetch_zones(CLAIMS_URL, 1000, "claims")
     except Exception as exc:
         print(f"    could not download: {exc}")
         return 1
-    claims = [slim(f, set(CLAIMS_KEEP)) for f in raw]
+    claims, seen_ids = [], set()
+    for i, raw in batches:
+        for f in raw:
+            per_zone[i]["claims"] += 1
+            key = fid(f, "OBJECTID", "CSE_NR")
+            if key in seen_ids:
+                continue
+            seen_ids.add(key)
+            claims.append(slim(f, set(CLAIMS_KEEP)))
 
     cells, spanning = aggregate_claims(claims, CLAIM_CELL)
     path = os.path.join(DATA, "claims.geojson")
     with open(path, "w") as fh:
         json.dump({"type": "FeatureCollection", "features": cells}, fh)
     print(f"    {len(claims):,} claims -> {len(cells):,} cells, "
-          f"{os.path.getsize(path)/1048576:.1f} MB")
-    print(f"      cell edge {CLAIM_CELL} deg, roughly "
-          f"{CLAIM_CELL * 69 * 0.73:.1f} x {CLAIM_CELL * 69:.1f} miles")
+          f"{os.path.getsize(path)/1048576:.2f} MB")
     if spanning:
         print(f"      {spanning:,} claims span more than one cell and are "
               "counted in each")
@@ -535,49 +621,83 @@ def main():
         dpath = os.path.join(DATA, "claims-detail.geojson")
         with open(dpath, "w") as fh:
             json.dump({"type": "FeatureCollection", "features": claims}, fh)
-        print(f"    full polygons -> claims-detail.geojson, "
-              f"{os.path.getsize(dpath)/1048576:.1f} MB")
+        print(f"    full outlines -> claims-detail.geojson, "
+              f"{os.path.getsize(dpath)/1048576:.2f} MB")
 
-    # ---- geology: only the units that produce ------------------------
+    # ---- geology: every unit, cut to the zone ------------------------
     print("\nGeology")
-    print("  Oregon DOGAMI, OGDC-6")
-    print(f"  {len(GEOLOGY_UNITS)} map units that MILO shows actually yield")
-    print("  agate, thundereggs or opal. Everything else is left out.")
-    quoted = ", ".join("'" + u.replace("'", "''") + "'" for u in GEOLOGY_UNITS)
+    print("  Oregon DOGAMI, OGDC-6, every map unit, cut at the zone edge")
     try:
-        raw = query(GEOLOGY_URL, BBOX, 400, "geology",
-                    where=f"MAP_UNIT_N IN ({quoted})")
+        batches = fetch_zones(GEOLOGY_URL, 400, "geology")
     except Exception as exc:
         print(f"    could not download: {exc}")
         print("    The map works without it - the geology layer will just")
-        print("    read as not downloaded. Check the field name is still")
-        print("    MAP_UNIT_N at:")
-        print("    " + GEOLOGY_URL.replace("/query", "?f=pjson"))
-        raw = []
+        print("    read as not downloaded.")
+        batches = []
 
-    if raw:
-        geo = [slim(f, set(GEOLOGY_KEEP)) for f in raw]
+    geo = []
+    for i, raw in batches:
+        box = ZONES[i][2]
+        for f in raw:
+            f = slim(f, set(GEOLOGY_KEEP))
+            g = clip_geom(f.get("geometry"), box)
+            if not g:
+                continue
+            f["geometry"] = trim_coords_geom(g)
+            geo.append(f)
+            per_zone[i]["geology"] += 1
+
+    if geo:
         path = os.path.join(DATA, "geology.geojson")
         with open(path, "w") as fh:
             json.dump({"type": "FeatureCollection", "features": geo}, fh)
-        print(f"    {len(geo):,} polygons, {os.path.getsize(path)/1048576:.1f} MB")
-        seen = {}
+        print(f"    {len(geo):,} polygon pieces, "
+              f"{os.path.getsize(path)/1048576:.2f} MB")
+        units = {}
         for f in geo:
             u = f["properties"].get("MAP_UNIT_N") or "?"
-            seen[u] = seen.get(u, 0) + 1
-        for u in sorted(seen, key=lambda k: -seen[k]):
-            print(f"      {seen[u]:>5,}  {u}")
-        missing = [u for u in GEOLOGY_UNITS if u not in seen]
-        if missing:
-            print("    Units with no polygons in the box (check the spelling")
-            print("    against the service if you expected them):")
-            for u in missing:
-                print(f"      {u}")
+            units[u] = units.get(u, 0) + 1
+        print(f"    {len(units)} different map units. Most common:")
+        for u in sorted(units, key=lambda k: -units[k])[:12]:
+            print(f"      {units[u]:>5,}  {u}")
+
+    # ---- per zone ----------------------------------------------------
+    print("\nBy zone")
+    print(f"    {'':<9} {'zone':<28} {'MILO':>5} {'claims':>7} {'geology':>8}")
+    empty = []
+    for (kind, name, _), c in zip(ZONES, per_zone):
+        print(f"    {kind:<9} {name:<28} {c['milo']:>5} {c['claims']:>7} "
+              f"{c['geology']:>8}")
+        if not c["geology"]:
+            empty.append(name)
+    if empty:
+        print("    No geology came back for: " + ", ".join(empty))
+        print("    Every square metre of Oregon is mapped, so that means the")
+        print("    query failed for those zones, not that the ground is blank.")
+
+    # The app draws the zone outlines and lists them from this file, so the
+    # zones are defined once, here, and nowhere else.
+    zf = []
+    for (kind, name, (w, s, e, n)), c in zip(ZONES, per_zone):
+        zf.append({"type": "Feature",
+                   "properties": {"name": name, "kind": kind,
+                                  "milo": c["milo"], "claims": c["claims"],
+                                  "geology": c["geology"]},
+                   "geometry": {"type": "Polygon", "coordinates": [[
+                       [w, s], [e, s], [e, n], [w, n], [w, s]]]}})
+    with open(os.path.join(DATA, "zones.geojson"), "w") as fh:
+        json.dump({"type": "FeatureCollection", "features": zf}, fh)
 
     total = sum(os.path.getsize(os.path.join(DATA, f)) for f in os.listdir(DATA))
     print(f"\nData total: {total/1048576:.1f} MB")
-    print("Done. Open index.html and everything should be there.")
+    print("Done. Open index.html.")
     return 0
+
+
+def trim_coords_geom(g):
+    g = dict(g)
+    g["coordinates"] = trim_coords(g["coordinates"])
+    return g
 
 
 if __name__ == "__main__":

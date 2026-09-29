@@ -101,8 +101,35 @@
   #bar.on{display:block}
   #fill{height:100%;width:0;background:var(--copperlit);transition:width .2s linear}
 
-    padding:3px 0;line-height:1.35}
-    padding-left:10px;font-size:11.5px}
+  /* geology legend: one row per rock family, each a switch */
+  #legend{display:none;padding:0 0 12px 38px}
+  #legend.on{display:block}
+  #legend .hd{font-size:12px;color:var(--sage);margin:0 0 6px}
+  #legend button{display:flex;align-items:center;gap:9px;width:100%;padding:6px 0;
+    background:none;border:none;color:var(--playa);font:inherit;font-size:13px;
+    text-align:left;cursor:pointer;line-height:1.35}
+  #legend button b{width:14px;height:14px;border-radius:4px;flex:none;
+    border:1.5px solid rgba(255,255,255,.35)}
+  #legend button em{margin-left:auto;font-style:normal;color:var(--sage);
+    font-variant-numeric:tabular-nums;padding-left:10px;font-size:12px}
+  #legend button[aria-pressed=false]{color:#6A6454}
+  #legend button[aria-pressed=false] b{opacity:.25}
+  #legend button:focus-visible{outline:2px solid var(--copperlit);outline-offset:2px}
+  #legend .note{font-size:12px;color:var(--sage);margin:6px 0 0;line-height:1.45}
+
+  /* zones */
+  .zone{display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--basalt2)}
+  .zone .kind{width:10px;align-self:stretch;border-radius:3px;flex:none}
+  .zone .txt{flex:1;min-width:0}
+  .zone .nm{font-size:14.5px;display:block}
+  .zone .sub2{font-size:12px;color:var(--sage);display:block;margin-top:2px;
+    font-variant-numeric:tabular-nums}
+  .zone button{border:none;background:var(--basalt2);color:var(--playa);border-radius:9px;
+    padding:9px 12px;font:inherit;font-size:13px;cursor:pointer;flex:none}
+  .zone button.saved{color:#9FBF8A}
+  .zone button:disabled{opacity:.5;cursor:default}
+  .zhead{display:flex;justify-content:space-between;align-items:baseline;
+    padding:14px 0 6px;font-size:13px;color:var(--sage)}
 
   .area{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--basalt2)}
   .area .txt{flex:1;min-width:0}
@@ -202,12 +229,23 @@
 <div class="sheet" id="sheet-layers">
   <div id="grip" aria-hidden="true"><span></span></div>
   <button class="close" data-close="sheet-layers" aria-label="Close">✕</button>
-  <h2>Layers</h2>
-  <p class="lede">Statewide, coast to Idaho. Saved on the phone.</p>
+  <h2>Zones</h2>
+  <p class="lede">Claims, mineral records and geology exist only inside
+    these zones. Field sites stay statewide. Save a zone before you lose
+    signal and its topo works in airplane mode.</p>
+  <div id="zonelist"></div>
+
+  <h2 class="sec">Layers</h2>
+  <div class="layer">
+    <span class="swatch" style="background:transparent;border:2px dashed #E8A200"></span>
+    <span class="txt"><span class="nm">Zone outlines</span>
+      <span class="src" id="src-zones">—</span></span>
+    <span class="sw"><input type="checkbox" id="ck-zones" checked><i></i></span>
+  </div>
 
   <div class="layer">
-    <span class="swatch" style="background:linear-gradient(135deg,#8C340E,#D6BC65)"></span>
-    <span class="txt"><span class="nm">Productive geology</span>
+    <span class="swatch" style="background:linear-gradient(135deg,#7A3A1A 0 33%,#E0B422 33% 66%,#9E6BC9 66%)"></span>
+    <span class="txt"><span class="nm">Geology</span>
       <span class="src" id="src-geology">DOGAMI OGDC-6</span></span>
     <span class="sw"><input type="checkbox" id="ck-geology" checked><i></i></span>
   </div>
@@ -218,25 +256,32 @@
   <div id="legend"></div>
 
   <div class="layer">
-    <span class="swatch" style="background:rgba(180,83,10,.25);border:1.5px solid #8A6A3A"></span>
+    <span class="swatch" style="background:linear-gradient(135deg,rgba(232,162,0,.3) 0 50%,rgba(138,75,42,.3) 50%);border:2px solid #C98A00"></span>
     <span class="txt"><span class="nm">Mining claims</span><span class="src" id="src-claims">BLM MLRS, not closed</span></span>
     <span class="sw"><input type="checkbox" id="ck-claims" checked><i></i></span>
   </div>
   <div class="sub">
+    <div class="kk"><b style="background:#E8A200;border-radius:3px"></b>Placer claim</div>
+    <div class="kk"><b style="background:#8A4B2A;border-radius:3px"></b>Lode claim</div>
+    <div class="kk" style="margin-bottom:10px"><b style="background:#6E6A60;border-radius:3px"></b>Mill or tunnel site</div>
     <label for="op-claims">Fill strength — kept low so the geology shows through</label>
-    <input type="range" id="op-claims" min="0" max="60" value="7">
+    <input type="range" id="op-claims" min="0" max="60" value="12">
   </div>
 
 
   <div class="layer">
-    <span class="swatch" style="background:linear-gradient(135deg,#E8A200 0 50%,#98A6B4 50%)"></span>
-    <span class="txt"><span class="nm">Metals</span><span class="src" id="src-milometal">DOGAMI MILO</span></span>
-    <span class="sw"><input type="checkbox" id="ck-milometal"><i></i></span>
+    <span class="swatch" style="background:#E8A200"></span>
+    <span class="txt"><span class="nm">Gold</span><span class="src" id="src-milogold">DOGAMI MILO</span></span>
+    <span class="sw"><input type="checkbox" id="ck-milogold" checked><i></i></span>
+  </div>
+  <div class="layer">
+    <span class="swatch" style="background:linear-gradient(135deg,#98A6B4 0 50%,#7C5CA8 50%)"></span>
+    <span class="txt"><span class="nm">Silver and other metals</span><span class="src" id="src-milometal">DOGAMI MILO</span></span>
+    <span class="sw"><input type="checkbox" id="ck-milometal" checked><i></i></span>
   </div>
   <div class="sub" style="padding-bottom:12px">
-    <div class="kk"><b style="background:#E8A200"></b>Gold</div>
-    <div class="kk"><b style="background:#98A6B4"></b>Silver</div>
-    <div class="kk"><b style="background:#7C5CA8"></b>Other metal</div>
+    <p class="lede" style="margin:0">Mercury, copper and the rest. Not what
+      you are after, but they mark ground where mineralizing fluids went.</p>
   </div>
 
   <!-- One row per gem category, built by the script from GEMS. -->
@@ -307,7 +352,8 @@
   <div id="wplist"></div>
 
 <h2 class="sec">Offline maps</h2>
-  <p class="lede">Pan to the ground you want, then save it while you still have signal.</p>
+  <p class="lede">For ground outside the zones: pan to it, then save it while you still have signal.
+    Zones save from the list at the top.</p>
 
   <label class="field" for="areaname">Name this area
     <input type="text" id="areaname" placeholder="Silvies road cut" maxlength="40" autocomplete="off">
@@ -571,6 +617,13 @@ function dropAt(lngLat){
 
 
 
+document.getElementById("ck-zones").addEventListener("change",function(){
+  var v=this.checked?"visible":"none";
+  ["zones-l","zones-t"].forEach(function(id){
+    if(map.getLayer(id))map.setLayoutProperty(id,"visibility",v);
+  });
+});
+
 document.getElementById("ck-wp").addEventListener("change",function(){
   ["wp-dot","wp-ring","wp-label"].forEach(function(id){
     if(map.getLayer(id))map.setLayoutProperty(id,"visibility",this.checked?"visible":"none");
@@ -618,7 +671,40 @@ function qualityNote(q){
   return null;
 }
 
+/* Placer gold, lode rust, everything else grey. Works for real outlines
+   (CSE_TYPE_NR) and for the fallback cells (placer / lode counts). */
+var CLAIM_COLOR=["case",
+  ["match",["coalesce",["get","CSE_TYPE_NR"],""],["384201","384203"],true,false],"#E8A200",
+  ["match",["coalesce",["get","CSE_TYPE_NR"],""],["384101","384103"],true,false],"#8A4B2A",
+  [">",["coalesce",["get","placer"],0],["coalesce",["get","lode"],0]],"#E8A200",
+  [">",["coalesce",["get","lode"],0],0],"#8A4B2A",
+  "#6E6A60"];
+
+function claimDetailPopup(p){
+  var kind=CLAIM_TYPE[String(first(p,"CSE_TYPE_NR")||"")]||"Mining claim";
+  var html="<h3>"+esc(first(p,"CSE_NAME")||"Unnamed claim")+"</h3>";
+  html+='<p class="kicker">'+esc(kind)+"</p>";
+  var acres=first(p,"RCRD_ACRS");
+  html+=rows([
+    ["Serial number",first(p,"CSE_NR")],
+    ["Old serial",first(p,"LEG_CSE_NR")],
+    ["Status",first(p,"CSE_DISP")],
+    ["Recorded size",acres?(+acres).toFixed(1)+" acres":null],
+    ["Occurrences inside",first(p,"_occ")]
+  ]);
+  html+='<p class="warn">The outline is BLM&rsquo;s, drawn to the survey quarter '+
+    "sections the claim touches &mdash; not the staked corners. The real "+
+    "boundary is in the Notice of Location. Look the serial number up in "+
+    "BLM&rsquo;s MLRS for the claimant and filings.</p>";
+  if(first(p,"_occ"))
+    html+='<p class="warn">Occurrences listed are what DOGAMI has recorded '+
+      "inside this outline. They are not what the claim is filed for &mdash; "+
+      "BLM records no commodity.</p>";
+  return html;
+}
+
 function claimPopup(p){
+  if(first(p,"CSE_NR","CSE_TYPE_NR","CSE_NAME")) return claimDetailPopup(p);
   var n=+first(p,"n")||0;
   var kinds=[["lode","Lode"],["placer","Placer"],["mill","Mill site"],
              ["tunnel","Tunnel site"],["other","Other"]]
@@ -793,47 +879,95 @@ function gemRow(g){
   };
 })();
 
-/* DOGAMI's own colours where the OGDC legend gives one, otherwise a
-   neutral. Only the productive units are downloaded, so this is short. */
-var GEO_COLORS={
-  "Leslie Gulch Ash-flow Tuff":"#C46A2E",
-  "Eastern tholeiitic lavas":"#8C340E",
-  "Tuff of Birch Creek":"#D2A24C",
-  "High-silica rhyolite domes and shallow intrusions":"#B04A8A",
-  "Volcanic mud flow breccia":"#7A6A55",
-  "Lower tuffaceous sedimentary rocks":"#B59D50",
-  "John Day Formation":"#EBDDB7",
-  "Rhyolite flows and domes":"#9E5AA8",
-  "Rhyolitic flows":"#A87ABF",
-  "Clarno Formation":"#C9B285",
-  "Porphyritic rhyolite":"#8E6FB0"
-};
-var GEO_FALLBACK="#A89B84";
+/* Geology arrives as every mapped unit in the zones - well over a hundred
+   names. A hundred colours reads as noise, so each unit is sorted into a
+   rock family and coloured by that. The families are the ones that decide
+   what you are standing on for these two objectives: gravels for placer,
+   basalt for sunstone, and the bedrock the gold comes out of.
+
+   Sorted on DOGAMI's rock-type field first, because it is the most
+   specific; the unit name and the general lithology only when rock type
+   is vague ("mixed lithologies"). First rule that matches wins, and the
+   order matters: "tuffaceous sedimentary rocks" contains "tuff" but is a
+   sediment, so sediments are tested before silicic volcanics. */
+var FAMILIES=[
+  {id:"gravel", label:"Gravels and alluvium", color:"#E0B422",
+   re:/alluvi|gravel|terrace|fan deposit|outwash|stream deposit|placer|coarse grained sediment/},
+  {id:"surface", label:"Other surface deposits", color:"#CFC6A8",
+   re:/landslide|colluvi|talus|lacustrine|playa|loess|dune|eolian|glacial|till\b|surficial|unconsolidated/},
+  {id:"meta", label:"Metamorphic and accreted rocks", color:"#3F8F7A",
+   re:/argillite|chert|greenstone|schist|serpentin|peridotit|ultramafic|m[eé]lange|metamorph|metased|metavol|phyllite|slate|amphibolite|gneiss|marble|quartzite/},
+  {id:"sed", label:"Sedimentary and volcaniclastic", color:"#B99C74",
+   re:/sediment|sandstone|siltstone|mudstone|shale|conglomerate|claystone|limestone|breccia|volcaniclastic|diatomite/},
+  {id:"silicic", label:"Rhyolite, dacite and tuff", color:"#9E6BC9",
+   re:/rhyolit|dacit|tuff|welded|ash-?flow|ignimbrite|felsic|obsidian|pumice|perlite/},
+  {id:"basalt", label:"Basalt and andesite", color:"#7A3A1A",
+   re:/basalt|andesit|mafic|lava/},
+  {id:"intrusive", label:"Intrusive rocks", color:"#E8606F",
+   re:/granit|granodiorit|tonalit|diorit|gabbro|pluton|batholith|monzonit|syenit|intrusive rocks/},
+  /* Last on purpose: units DOGAMI describes only as "volcanic rocks",
+     like much of the Clarno. Honest about being unspecific. */
+  {id:"volcanic", label:"Mixed volcanic rocks", color:"#8C7B6B",
+   re:/volcanic/}
+];
+var FAM_OTHER={id:"other", label:"Other or unsorted", color:"#A89B84"};
+var FAM_BY_ID={}; FAMILIES.concat([FAM_OTHER]).forEach(function(f){FAM_BY_ID[f.id]=f;});
+
+function familyOf(p){
+  var tries=[p.G_ROCK_TYP, p.MAP_UNIT_N, p.LITH_GEN_U];
+  /* Gravels and surface deposits win if ANY field names them. "Alluvium"
+     carries the rock type "fine grained sediments", which would otherwise
+     file it under sedimentary rock - and alluvium is the one family the
+     placer half of this map most needs to see. */
+  var all=tries.map(function(v){return String(v||"").toLowerCase();}).join(" | ");
+  if(FAMILIES[0].re.test(all))return FAMILIES[0].id;
+  if(FAMILIES[1].re.test(all))return FAMILIES[1].id;
+  for(var t=0;t<tries.length;t++){
+    var txt=String(tries[t]||"").toLowerCase();
+    if(!txt||txt==="mixed lithologies")continue;
+    for(var i=0;i<FAMILIES.length;i++) if(FAMILIES[i].re.test(txt)) return FAMILIES[i].id;
+  }
+  return "other";
+}
+var FAM_ON={};   /* family id -> shown; everything starts shown */
+FAMILIES.concat([FAM_OTHER]).forEach(function(f){FAM_ON[f.id]=true;});
+function famFilter(){
+  var on=Object.keys(FAM_ON).filter(function(k){return FAM_ON[k];});
+  return ["in",["get","_fam"],["literal",on]];
+}
 
 var LAYERS=[
   {
-    /* Only the map units MILO shows actually yield agate, thundereggs or
-       opal - the filtering happens in fetch.py, not here. Drawn first and
-       kept pale so everything else reads on top of it. */
+    /* Every unit inside the zones, coloured by rock family. Drawn first
+       and kept pale so everything else reads on top of it. */
     id:"geology", file:"data/geology.geojson", check:"ck-geology", src:"src-geology",
     order:1, defaultOn:true, opacity:0.35, opSlider:"op-geology",
-    fill:function(){return matchExpr("MAP_UNIT_N",GEO_COLORS,GEO_FALLBACK);},
+    prep:function(g){ (g.features||[]).forEach(function(f){
+      f.properties=f.properties||{}; f.properties._fam=familyOf(f.properties); }); },
+    fill:function(){
+      var e=["match",["coalesce",["get","_fam"],""]];
+      FAMILIES.forEach(function(f){e.push(f.id,f.color);});
+      e.push(FAM_OTHER.color); return e;
+    },
+    layerFilter:famFilter,
     line:"#6A5B45", lineWidth:0.5,
     popup:function(p){
       var name=first(p,"MAP_UNIT_N","FORMATION")||"Geologic unit";
+      var fam=FAM_BY_ID[first(p,"_fam")]||FAM_OTHER;
       var html="<h3>"+esc(name)+"</h3>";
-      html+='<p class="kicker">'+esc([first(p,"MAP_UNIT_L"),first(p,"AGE_NAME")]
-        .filter(Boolean).join(" &middot; "))+"</p>";
+      html+='<p class="kicker">'+esc([fam.label,first(p,"AGE_NAME")]
+        .filter(Boolean).join(" \u00b7 "))+"</p>";
       html+=rows([
+        ["Map symbol",first(p,"MAP_UNIT_L")],
         ["Rock type",first(p,"G_ROCK_TYP")],
         ["Lithology",first(p,"LITH_GEN_U")],
-        ["Group",first(p,"TERRANE_GR")],
-        ["Member",first(p,"MEMBER")]
+        ["Formation",first(p,"FORMATION")],
+        ["Member",first(p,"MEMBER")],
+        ["Terrane",first(p,"TERRANE_GR")]
       ]);
-      html+='<p class="warn">This unit is on the map because MILO records '+
-        "agate, thundereggs or opal coming out of it more often than out of "+
-        "other units. That is a record of where people have looked and found "+
-        "something, not a promise about this particular outcrop.</p>";
+      html+='<p class="warn">Boundaries come from regional mapping and can be '+
+        "off by a few hundred metres on the ground. Trust the rock in front of "+
+        "you over the line on the map.</p>";
       var cite=first(p,"Citation"), link=first(p,"Link");
       if(cite) html+='<p class="kicker" style="margin:9px 0 0">'+
         (link?'<a href="'+esc(link)+'" target="_blank" rel="noopener">'+esc(cite)+"</a>":esc(cite))+"</p>";
@@ -841,9 +975,18 @@ var LAYERS=[
     }
   },
   {
+    id:"milogold", file:"data/milo.geojson", sourceId:"milo",
+    check:"ck-milogold", src:"src-milogold",
+    order:4, defaultOn:true, point:true, filter:["==",["get","_cat"],"gold"],
+    count:function(p){return p._cat==="gold";},
+    popup:function(p){return miloPopup(p);}
+  },
+  {
     id:"milometal", file:"data/milo.geojson", sourceId:"milo",
     check:"ck-milometal", src:"src-milometal",
-    order:4, defaultOn:false, point:true, filter:["==",["get","_grp"],"metal"],
+    order:4, defaultOn:true, point:true,
+    filter:["all",["==",["get","_grp"],"metal"],["!=",["get","_cat"],"gold"]],
+    count:function(p){return p._grp==="metal"&&p._cat!=="gold";},
     popup:function(p){return miloPopup(p);}
   }
 ].concat(GEMS.map(function(g,i){
@@ -866,21 +1009,21 @@ var LAYERS=[
   };
 })).concat([
   {
-    /* Claims arrive as cells, not polygons - see aggregate_claims in
-       fetch.py.
+    /* Real claim outlines, one per claim, from claims-detail.geojson.
+       If that file is missing the map falls back to the half-mile cells
+       in claims.geojson, which is what the statewide version drew.
 
-       The fill is deliberately almost nothing. An earlier version shaded
-       cells darker as the claim count rose, which read well on its own
-       and was useless in practice: it painted over the geology, and the
-       geology is the reason you are looking at that ground. The count
-       goes in a label instead, so the information costs no ink. Slide
-       "Fill strength" up if you want the shading back. */
-    id:"claims", file:"data/claims.geojson", check:"ck-claims", src:"src-claims",
-    labelMinzoom:10,
-    order:3, defaultOn:true, opacity:0.07, opSlider:"op-claims",
-    fill:function(){return "#B4530A";},
-    line:"#8A6A3A", lineWidth:0.9,
-    label:["case",[">",["get","n"],1],["to-string",["get","n"]],""],
+       Colour says what kind of claim it is - that is the one thing BLM
+       does record. Fill stays faint so the geology reads through; the
+       outline carries the information. */
+    id:"claims", file:"data/claims-detail.geojson", fallback:"data/claims.geojson",
+    check:"ck-claims", src:"src-claims",
+    labelMinzoom:14,
+    order:3, defaultOn:true, opacity:0.12, opSlider:"op-claims",
+    fill:function(){return CLAIM_COLOR;},
+    line:function(){return CLAIM_COLOR;}, lineWidth:1.4,
+    label:["case",["has","CSE_NAME"],["get","CSE_NAME"],
+           [">",["coalesce",["get","n"],0],1],["to-string",["get","n"]],""],
     popup:function(p){return claimPopup(p);}
   }
 ]);
@@ -913,15 +1056,29 @@ map.on("load",function(){
     return fileCache[url];
   }
 
+  /* A layer with a fallback file (claims) tries its own file first and
+     the fallback only when the first is missing or empty. */
+  function fetchLayer(L){
+    return fetchOnce(L.file).catch(function(){return null;}).then(function(g){
+      if(g&&g.features&&g.features.length){ L.usedFile=L.file; return g; }
+      if(!L.fallback) return g;
+      return fetchOnce(L.fallback).then(function(g2){ L.usedFile=L.fallback; return g2; });
+    });
+  }
+
+  zonesBoot(fetchOnce);
+
   LAYERS.forEach(function(L){
     if(L.local)return;
-    fetchOnce(L.file).then(function(g){
+    fetchLayer(L).then(function(g){
       if(!g||!g.features||!g.features.length){markMissing(L);return;}
       if(L.rh){ RAW.rh=g; marksApply(); }
+      if(L.prep) L.prep(g);
       build(L,g);
+      zonesToTop();
       loaded[L.id]=true;
       RAW[L.id]=g;
-      if(L.id==="milometal")RAW.milo=g;
+      if(L.sourceId==="milo")RAW.milo=g;
       if(RAW.claims&&RAW.milo)crossReference(RAW.claims,RAW.milo);
       var ck=document.getElementById(L.check);
       if(ck){
@@ -930,15 +1087,20 @@ map.on("load",function(){
         setVisible(L, ck.checked && !(L.rh && gate && !gate.checked));
       }
       var n=g.features.length;
-      if(L.filter&&L.filter[1]&&L.filter[1][1]==="_grp"){
-        var want=L.filter[2];
-        n=g.features.filter(function(f){return f.properties&&f.properties._grp===want;}).length;
+      if(L.count){
+        n=g.features.filter(function(f){return f.properties&&L.count(f.properties);}).length;
       } else if(L.gemCat){
         n=g.features.filter(function(f){
           return f.properties&&f.properties._cat===L.gemCat;}).length;
       }
       if(L.id==="geology") buildLegend(g);
       if(L.gemCat) countPut(L.gemCat, L.rh?"rh":"milo", n);
+      else if(L.id==="claims"&&document.getElementById(L.src))
+        document.getElementById(L.src).textContent=(L.usedFile===L.fallback)
+          ? n.toLocaleString()+" half-mile cells (outlines not downloaded yet)"
+          : n.toLocaleString()+(n===1?" claim, not closed":" claims, not closed");
+      else if(L.id==="geology"&&document.getElementById(L.src))
+        document.getElementById(L.src).textContent=n.toLocaleString()+" mapped pieces, DOGAMI OGDC-6";
       else if(document.getElementById(L.src))
         document.getElementById(L.src).textContent=n.toLocaleString()+" recorded";
     }).catch(function(err){
@@ -1344,6 +1506,152 @@ function bboxOf(g){
   return isFinite(b[0])?b:null;
 }
 
+/* ---------- zones ------------------------------------------------
+   The boxes fetch.py pulled data for, written to data/zones.geojson.
+   Outlined on the map so it is obvious where the data stops, and listed
+   at the top of the menu with a one-tap offline save for each.
+   ------------------------------------------------------------------ */
+var ZONES=null;
+var ZONE_COLOR={placer:"#E8A200", sunstone:"#C1520F"};
+var ZONE_MAXZ=16;   /* the topo tiles stop at 16 */
+
+function zoneBbox(f){ return bboxOf(f.geometry); }
+function zoneKm2(b){
+  var mid=(b[1]+b[3])/2;
+  return (b[2]-b[0])*111.32*Math.cos(mid*Math.PI/180)*(b[3]-b[1])*110.57;
+}
+
+function zonesBoot(fetchOnce){
+  fetchOnce("data/zones.geojson").catch(function(){return null;}).then(function(g){
+    var src=document.getElementById("src-zones");
+    if(!g||!g.features||!g.features.length){
+      if(src){src.textContent="Not downloaded yet — run fetch.py";src.classList.add("miss");}
+      var ck=document.getElementById("ck-zones"); if(ck){ck.checked=false;ck.disabled=true;}
+      renderZones(); return;
+    }
+    ZONES=g;
+    if(src){
+      var np=g.features.filter(function(f){return f.properties.kind==="placer";}).length;
+      src.textContent=np+" placer, "+(g.features.length-np)+" sunstone";
+    }
+    map.addSource("zones",{type:"geojson",data:g});
+    addLayerSafe({id:"zones-l",type:"line",source:"zones",
+      paint:{"line-color":["match",["get","kind"],"placer",ZONE_COLOR.placer,ZONE_COLOR.sunstone],
+             "line-width":["interpolate",["linear"],["zoom"],6,1.5,12,2.5],
+             "line-dasharray":[3,2]}});
+    addLayerSafe({id:"zones-t",type:"symbol",source:"zones",minzoom:7,maxzoom:13,
+      layout:{"text-field":["get","name"],"text-size":12.5,"text-anchor":"bottom-left",
+              "text-offset":[0.3,-0.3],"text-font":["Noto Sans Bold"],
+              "symbol-placement":"point","text-allow-overlap":false},
+      paint:{"text-color":["match",["get","kind"],"placer","#6B4A00","#6B2A06"],
+             "text-halo-color":"rgba(255,255,255,.95)","text-halo-width":2}});
+    zonesToTop();
+    renderZones();
+  });
+}
+/* Zone outlines sit above every data layer, so the edge of the data is
+   always visible. Called again whenever a layer finishes loading. */
+function zonesToTop(){
+  ["zones-l","zones-t"].forEach(function(id){ if(map.getLayer(id))map.moveLayer(id); });
+}
+
+function zoneSaved(name){
+  return loadAreas().filter(function(a){return a.zone===name;})[0]||null;
+}
+
+function renderZones(){
+  var el=document.getElementById("zonelist");
+  if(!el)return;
+  if(!ZONES){
+    el.innerHTML='<div class="zhead"><span>No zones yet. Run fetch.py, then reload.</span></div>';
+    return;
+  }
+  var groups=[["placer","Placer gold"],["sunstone","Sunstone"]];
+  el.innerHTML=groups.map(function(gp){
+    var list=ZONES.features.map(function(f,i){return {f:f,i:i};})
+      .filter(function(x){return x.f.properties.kind===gp[0];});
+    if(!list.length)return "";
+    return '<div class="zhead"><span>'+gp[1]+"</span><span>"+list.length+" zones</span></div>"+
+      list.map(function(x){
+        var p=x.f.properties, b=zoneBbox(x.f);
+        var tiles=urlsFor(b,ZONE_MAXZ).length, size=tiles*BYTES_PER_TILE/1048576;
+        var saved=zoneSaved(p.name);
+        var facts=[Math.round(zoneKm2(b))+" km\u00b2",
+                   (p.claims||0)+((p.claims===1)?" claim":" claims"),
+                   (p.milo||0)+" mineral records"].join(", ");
+        return '<div class="zone"><span class="kind" style="background:'+ZONE_COLOR[p.kind]+'"></span>'+
+          '<span class="txt"><span class="nm">'+esc(p.name)+"</span>"+
+          '<span class="sub2">'+facts+"</span></span>"+
+          '<button data-zgo="'+x.i+'">Go</button>'+
+          '<button data-zsave="'+x.i+'"'+(saved?' class="saved"':"")+'>'+
+            (saved?"Saved":"Save "+mb(size))+"</button></div>";
+      }).join("");
+  }).join("");
+
+  el.querySelectorAll("[data-zgo]").forEach(function(b){
+    b.onclick=function(){
+      var bb=zoneBbox(ZONES.features[+b.dataset.zgo]);
+      map.fitBounds([[bb[0],bb[1]],[bb[2],bb[3]]],{padding:30});
+      closeSheets();
+    };
+  });
+  el.querySelectorAll("[data-zsave]").forEach(function(b){
+    b.onclick=function(){ saveZone(+b.dataset.zsave,b); };
+  });
+}
+
+function saveZone(i,btn){
+  var f=ZONES.features[i], name=f.properties.name, bbox=zoneBbox(f);
+  if(!navigator.onLine){toast("No connection. Saving a zone needs signal.");return;}
+  var urls=urlsFor(bbox,ZONE_MAXZ), size=urls.length*BYTES_PER_TILE/1048576;
+  if(freeMB!==null&&size>freeMB*0.8){
+    toast("Not enough room: this zone needs about "+mb(size)+" and "+mb(freeMB)+
+          " is free. Delete a saved area first.");
+    return;
+  }
+  if(zoneSaved(name)&&btn.dataset.sure!=="1"){
+    btn.dataset.sure="1"; btn.textContent="Save again?";
+    setTimeout(function(){ if(btn.dataset.sure==="1"){btn.dataset.sure="";btn.textContent="Saved";} },4000);
+    return;
+  }
+  btn.dataset.sure=""; btn.disabled=true; btn.textContent="0%";
+  grab(urls,function(d,t){ btn.textContent=Math.floor(d/t*100)+"%"; }).then(function(r){
+    if(!r.saved){
+      btn.disabled=false; renderZones();
+      toast("Nothing saved for "+name+": no tiles came through. Check the signal and try again.");
+      return;
+    }
+    var list=loadAreas().filter(function(a){return a.zone!==name;});
+    list.unshift({name:name+" (zone)",zone:name,bbox:bbox,maxZ:ZONE_MAXZ,
+                  tiles:r.saved,date:Date.now()});
+    storeAreas(list); btn.disabled=false;
+    renderZones(); renderAreas(); usage(); checkSpace().then(estimate);
+    toast(r.failed
+      ? name+" saved with "+r.failed.toLocaleString()+" tiles missing. Tap Saved to fill the gaps."
+      : name+" saved. Its topo now works in airplane mode.");
+  });
+}
+
+function insideRing(pt,ring){
+  var x=pt[0], y=pt[1], hit=false;
+  for(var i=0,j=ring.length-1;i<ring.length;j=i++){
+    var xi=ring[i][0], yi=ring[i][1], xj=ring[j][0], yj=ring[j][1];
+    if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))hit=!hit;
+  }
+  return hit;
+}
+function insideGeom(pt,g){
+  var polys=g.type==="Polygon"?[g.coordinates]:g.type==="MultiPolygon"?g.coordinates:[];
+  for(var i=0;i<polys.length;i++){
+    var p=polys[i];
+    if(!p.length||!insideRing(pt,p[0]))continue;
+    var inHole=false;
+    for(var h=1;h<p.length;h++) if(insideRing(pt,p[h])){inHole=true;break;}
+    if(!inHole)return true;
+  }
+  return false;
+}
+
 function crossReference(claims,milo){
   /* Tally which recorded occurrences fall inside each claim cell. This is
      a spatial fact about the ground, NOT a statement about what anything
@@ -1357,15 +1665,16 @@ function crossReference(claims,milo){
   }).filter(Boolean);
   if(!pts.length)return;
 
-  /* Cells are axis-aligned squares, so a bounds test is exact and there
-     is no need for the ray casting the polygons used to require. */
+  /* Real outlines need a proper inside test; a bounding box alone would
+     count a point that sits in the notch of an L-shaped claim. The box is
+     only used to skip the obvious misses cheaply. */
   (claims.features||[]).forEach(function(cf){
-    var r=cf.geometry&&cf.geometry.coordinates&&cf.geometry.coordinates[0];
-    if(!r||r.length<4)return;
-    var w=r[0][0], s2=r[0][1], e=r[2][0], n=r[2][1];
+    var g=cf.geometry, bb=bboxOf(g);
+    if(!bb)return;
     var tally={};
     pts.forEach(function(p){
-      if(p.c[0]>=w&&p.c[0]<e&&p.c[1]>=s2&&p.c[1]<n){
+      if(p.c[0]<bb[0]||p.c[0]>bb[2]||p.c[1]<bb[1]||p.c[1]>bb[3])return;
+      if(insideGeom(p.c,g)){
         var k=String(p.com).trim();
         tally[k]=(tally[k]||0)+1;
       }
@@ -1416,9 +1725,15 @@ function build(L,geoj){
     addLayerSafe({id:L.id+"-f",type:"circle",source:L.srcId,
       layout:{visibility:vis}, filter:rhFilter(L),
       paint:{
-        "circle-radius":["*",
-          ["case",["==",["get","_fav"],1],1.45,1],
-          ["interpolate",["linear"],["zoom"], 5,5.5, 9,7, 13,8.5, 16,11]],
+        /* The zoom curve has to be the outermost expression - MapLibre
+           rejects "zoom" nested inside anything else, and addLayerSafe
+           used to swallow that, so these dots never drew at all. The
+           favourite multiplier goes inside each stop instead. */
+        "circle-radius":["interpolate",["linear"],["zoom"],
+          5, ["*",["case",["==",["get","_fav"],1],1.45,1],5.5],
+          9, ["*",["case",["==",["get","_fav"],1],1.45,1],7],
+          13,["*",["case",["==",["get","_fav"],1],1.45,1],8.5],
+          16,["*",["case",["==",["get","_fav"],1],1.45,1],11]],
         "circle-color":MILO_COLORS,
         "circle-opacity":["case",["==",["get","_seen"],1],0.45,1],
         "circle-stroke-width":["case",["==",["get","_fav"],1],3,1.6],
@@ -1451,19 +1766,23 @@ function build(L,geoj){
   }
 
   if(L.opacity>0&&L.fill){
-    addLayerSafe({id:L.id+"-f",type:"fill",source:L.srcId,layout:{visibility:vis},
-      paint:{"fill-color":L.fill(),"fill-opacity":L.opacity}});
+    var fl={id:L.id+"-f",type:"fill",source:L.srcId,layout:{visibility:vis},
+      paint:{"fill-color":L.fill(),"fill-opacity":L.opacity}};
+    if(L.layerFilter)fl.filter=L.layerFilter();
+    addLayerSafe(fl);
   } else if(L.hitFill){
     /* invisible fill so the whole claim block is tappable, not just its edge */
     addLayerSafe({id:L.id+"-f",type:"fill",source:L.srcId,layout:{visibility:vis},
       paint:{"fill-color":"#000","fill-opacity":0.01}});
   }
 
-  addLayerSafe({id:L.id+"-l",type:"line",source:L.srcId,layout:{visibility:vis},
+  var ln={id:L.id+"-l",type:"line",source:L.srcId,layout:{visibility:vis},
     paint:Object.assign({
       "line-color":typeof L.line==="function"?L.line():L.line,
       "line-width":L.lineWidth||1
-    },L.dash?{"line-dasharray":L.dash}:{})});
+    },L.dash?{"line-dasharray":L.dash}:{})};
+  if(L.layerFilter)ln.filter=L.layerFilter();
+  addLayerSafe(ln);
 
   if(L.label){
     addLayerSafe({id:L.id+"-t",type:"symbol",source:L.srcId,
@@ -1583,17 +1902,30 @@ map.on("click",function(e){
 function buildLegend(geoj){
   var counts={};
   (geoj.features||[]).forEach(function(f){
-    var k=(f.properties&&f.properties.MAP_UNIT_N)||"Other";
+    var k=(f.properties&&f.properties._fam)||"other";
     counts[k]=(counts[k]||0)+1;
   });
-  var keys=Object.keys(counts).sort(function(a,b){return counts[b]-counts[a];});
   var el=document.getElementById("legend");
   if(!el)return;
-  el.innerHTML='<div class="hd">Units that yield agate, thundereggs or opal</div>'+
-    keys.map(function(k){
-      return '<div><b style="background:'+(GEO_COLORS[k]||GEO_FALLBACK)+'"></b>'+
-        esc(k)+"<em>"+counts[k]+"</em></div>";
-    }).join("");
+  var fams=FAMILIES.concat([FAM_OTHER]).filter(function(f){return counts[f.id];});
+  el.innerHTML='<div class="hd">Tap a rock family to hide or show it</div>'+
+    fams.map(function(f){
+      return '<button type="button" data-fam="'+f.id+'" aria-pressed="'+
+        (FAM_ON[f.id]?"true":"false")+'"><b style="background:'+f.color+'"></b>'+
+        esc(f.label)+"<em>"+counts[f.id].toLocaleString()+"</em></button>";
+    }).join("")+
+    '<p class="note">Each unit is sorted into a family from DOGAMI&rsquo;s rock type. '+
+    "Tap the map for the unit&rsquo;s real name.</p>";
+  el.querySelectorAll("[data-fam]").forEach(function(btn){
+    btn.onclick=function(){
+      var id=btn.dataset.fam;
+      FAM_ON[id]=!FAM_ON[id];
+      btn.setAttribute("aria-pressed",FAM_ON[id]?"true":"false");
+      ["geology-f","geology-l"].forEach(function(lid){
+        if(map.getLayer(lid))map.setFilter(lid,famFilter());
+      });
+    };
+  });
   var ck=document.getElementById("ck-geology");
   el.classList.toggle("on",!!(ck&&ck.checked));
 }
@@ -1691,7 +2023,7 @@ document.getElementById("gobtn").onclick=function(){
 function openSheet(){
   document.getElementById("sheet-layers").classList.add("open");
   document.getElementById("btn-layers").classList.add("active");
-  usage();renderAreas();wpRefresh();importRows();
+  usage();renderAreas();renderZones();wpRefresh();importRows();
   checkSpace().then(estimate);
 }
 function closeSheets(){
@@ -1895,7 +2227,7 @@ function removeArea(idx,btn){
   caches.open(TILE_CACHE).then(function(c){
     return Promise.all(drop.map(function(u){return c.delete(u);}));
   }).then(function(){
-    list.splice(idx,1); storeAreas(list); renderAreas(); usage(); checkSpace().then(estimate);
+    list.splice(idx,1); storeAreas(list); renderAreas(); renderZones(); usage(); checkSpace().then(estimate);
   });
 }
 
@@ -1932,7 +2264,14 @@ function grab(urls,prog){
         if(h){ok++;return;}
         return fetch(u,{mode:"cors"}).then(function(r){
           if(!r.ok)throw 0;return c.put(u,r.clone());}).then(function(){ok++;})
-          .catch(function(){return fetch(u,{mode:"no-cors"}).then(function(r){return c.put(u,r);})
+          /* Second try without CORS. That returns an "opaque" response we
+             cannot inspect, which is fine for a tile - but when there is no
+             signal the service worker answers with its own 504 stand-in,
+             and caching that would leave a permanently blank tile. So keep
+             only a real opaque response or a real success. */
+          .catch(function(){return fetch(u,{mode:"no-cors"}).then(function(r){
+              if(r.type!=="opaque"&&!r.ok)throw 0;
+              return c.put(u,r);})
             .then(function(){ok++;}).catch(function(){bad++;});});
       }).then(function(){prog(ok+bad,n);return next();});
     }

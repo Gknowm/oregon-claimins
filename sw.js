@@ -11,7 +11,7 @@
    That is what tells phones to pick up the new copy.
 ------------------------------------------------------------------ */
 
-const SHELL_VERSION = 11;
+const SHELL_VERSION = 12;
 const SHELL_CACHE = "oregon-shell-v" + SHELL_VERSION;
 const TILE_CACHE  = "oregon-tiles-v1";  // must match TILE_CACHE in index.html
 
@@ -25,6 +25,8 @@ const SHELL_FILES = [
   "icon-192.png",
   "icon-512.png",
   "data/claims.geojson",
+  "data/claims-detail.geojson",
+  "data/zones.geojson",
   "data/milo.geojson",
   "data/geology.geojson",
   "data/rockhounding.geojson"
