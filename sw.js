@@ -11,7 +11,7 @@
    That is what tells phones to pick up the new copy.
 ------------------------------------------------------------------ */
 
-const SHELL_VERSION = 13;
+const SHELL_VERSION = 15;
 const SHELL_CACHE = "oregon-shell-v" + SHELL_VERSION;
 const TILE_CACHE  = "oregon-tiles-v1";  // must match TILE_CACHE in index.html
 
@@ -22,6 +22,11 @@ const SHELL_FILES = [
   "manifest.json",
   "vendor/maplibre-gl.js",
   "vendor/maplibre-gl.css",
+  // Map label fonts, so names and pin numbers draw with no signal.
+  "vendor/fonts/NotoSansBold/0-255.pbf",
+  "vendor/fonts/NotoSansBold/8192-8447.pbf",
+  "vendor/fonts/NotoSansRegular/0-255.pbf",
+  "vendor/fonts/NotoSansRegular/8192-8447.pbf",
   "icon-192.png",
   "icon-512.png",
   "data/claims.geojson",

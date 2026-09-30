@@ -4,8 +4,9 @@ Fills in everything the field map needs. Run it once:
 
     python3 fetch.py
 
-Covers two objectives only, sunstone and placer gold, in 15 small zones
-(see ZONES below) instead of the whole state. Each zone is a box about
+Covers three objectives - sunstone, placer gold, and specimen minerals
+(green garnet and chrome diopside in the Strawberry chromite belt) - in
+16 small zones (see ZONES below) instead of the whole state. Each zone is a box about
 5 km out from every target point in it; where two boxes touched they
 were merged, so no ground is fetched twice.
 
@@ -35,6 +36,7 @@ Needs Python 3.8 or newer. No extra packages.
 
 import json
 import os
+import time
 import ssl
 import sys
 import urllib.parse
@@ -72,6 +74,10 @@ ZONES = [
     ("sunstone", "Silvies east",                (-118.905, 43.868, -118.781, 43.959)),
     ("sunstone", "Dust Devil",                  (-119.927, 42.669, -119.805, 42.759)),
     ("sunstone", "Plush",                       (-119.957, 42.779, -119.834, 42.870)),
+    # The old chromite mines between Canyon City and Indian Creek, about
+    # 2 km out from every kept target. Specimen hunting: uvarovite (green
+    # garnet) and chrome diopside. Does not touch any other zone.
+    ("specimen", "Strawberry chromite belt",    (-118.952, 44.316, -118.724, 44.390)),
 ]
 
 # ----------------------------------------------------------------------
@@ -145,6 +151,15 @@ CLAIM_CELL = 0.01
 # it yet - claims.geojson (cells) keeps the current app working until the
 # app is updated to draw real outlines.
 CLAIM_DETAIL = True
+
+# Claim outlines for onX. onX has no mining-claims layer, but it imports
+# KML shapes, so the claims in these zones are also written to
+# claims-for-onx.kml - next to this script, NOT in data/, so it is never
+# pushed to the website. Import it into onX from your phone. Add zone
+# names here to include more; every claim is one shape in onX, and a busy
+# zone like Dust Devil (300+ claims) would bury everything else.
+ONX_KML_ZONES = ["Strawberry chromite belt"]
+ONX_KML = os.path.join(HERE, "claims-for-onx.kml")
 
 PRECISION = 5   # about a metre - finer than the survey grid this comes from
 
@@ -504,8 +519,8 @@ def main():
 
     os.makedirs(DATA, exist_ok=True)
     print(f"{len(ZONES)} zones: "
-          f"{sum(z[0] == 'placer' for z in ZONES)} placer, "
-          f"{sum(z[0] == 'sunstone' for z in ZONES)} sunstone")
+          + ", ".join(f"{sum(z[0] == k for z in ZONES)} {k}"
+                      for k in dict.fromkeys(z[0] for z in ZONES)))
     print("Occurrences, claims and geology: everything inside the zones, "
           "nothing outside.\n")
 
@@ -617,6 +632,8 @@ def main():
         print(f"      {spanning:,} claims span more than one cell and are "
               "counted in each")
 
+    write_onx_kml(batches)
+
     if CLAIM_DETAIL:
         dpath = os.path.join(DATA, "claims-detail.geojson")
         with open(dpath, "w") as fh:
@@ -692,6 +709,77 @@ def main():
     print(f"\nData total: {total/1048576:.1f} MB")
     print("Done. Open index.html.")
     return 0
+
+
+CLAIM_KIND = {"384101": "Lode claim", "384103": "Lode claim",
+              "384201": "Placer claim", "384203": "Placer claim",
+              "384301": "Mill site", "384303": "Mill site",
+              "384401": "Tunnel site", "384403": "Tunnel site"}
+# KML colours are alpha-blue-green-red. Same colours as the app.
+KML_COLOR = {"Placer claim": "00a2e8", "Lode claim": "2a4b8a"}
+
+
+def write_onx_kml(batches):
+    """Write the claims inside ONX_KML_ZONES as KML shapes for onX."""
+    want = {i for i, z in enumerate(ZONES) if z[1] in ONX_KML_ZONES}
+    if not want:
+        return
+    seen, marks = set(), []
+    for i, raw in batches:
+        if i not in want:
+            continue
+        for f in raw:
+            key = fid(f, "OBJECTID", "CSE_NR")
+            if key in seen:
+                continue
+            seen.add(key)
+            p = f.get("properties") or {}
+            g = f.get("geometry") or {}
+            polys = ([g["coordinates"]] if g.get("type") == "Polygon" else
+                     g["coordinates"] if g.get("type") == "MultiPolygon" else [])
+            if not polys:
+                continue
+            kind = CLAIM_KIND.get(str(p.get("CSE_TYPE_NR") or ""), "Claim")
+            name = p.get("CSE_NAME") or "Unnamed claim"
+            desc = (f"{kind}. Serial {p.get('CSE_NR') or '?'}"
+                    + (f" (old {p['LEG_CSE_NR']})" if p.get("LEG_CSE_NR") else "")
+                    + f". Status: {p.get('CSE_DISP') or '?'}. "
+                    "Outline is BLM's survey-grid version, not the staked corners. "
+                    f"From BLM MLRS on {time.strftime('%b %d, %Y')}.")
+            style = "placer" if kind == "Placer claim" else "lode"
+            shapes = []
+            for poly in polys:
+                rings = ["<outerBoundaryIs><LinearRing><coordinates>"
+                         + " ".join(f"{x:.5f},{y:.5f},0" for x, y, *_ in poly[0])
+                         + "</coordinates></LinearRing></outerBoundaryIs>"]
+                for hole in poly[1:]:
+                    rings.append("<innerBoundaryIs><LinearRing><coordinates>"
+                                 + " ".join(f"{x:.5f},{y:.5f},0" for x, y, *_ in hole)
+                                 + "</coordinates></LinearRing></innerBoundaryIs>")
+                shapes.append("<Polygon>" + "".join(rings) + "</Polygon>")
+            geom = shapes[0] if len(shapes) == 1 else \
+                "<MultiGeometry>" + "".join(shapes) + "</MultiGeometry>"
+            marks.append(f"<Placemark><name>{xml_esc(name)}</name>"
+                         f"<description>{xml_esc(desc)}</description>"
+                         f"<styleUrl>#{style}</styleUrl>{geom}</Placemark>")
+    head = ['<?xml version="1.0" encoding="UTF-8"?>',
+            '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>',
+            f"<name>Mining claims - {', '.join(ONX_KML_ZONES)}</name>"]
+    for k, c in (("placer", KML_COLOR["Placer claim"]), ("lode", KML_COLOR["Lode claim"])):
+        head.append(f'<Style id="{k}"><LineStyle><color>ff{c}</color><width>2</width>'
+                    f'</LineStyle><PolyStyle><color>40{c}</color></PolyStyle></Style>')
+    with open(ONX_KML, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(head + marks + ["</Document></kml>"]))
+    print(f"    onX file -> {os.path.basename(ONX_KML)} (next to fetch.py, not in data/): "
+          f"{len(marks)} claims, {os.path.getsize(ONX_KML)/1024:.0f} KB")
+    if not marks:
+        print("      No active claims in those zones. The file is written anyway,")
+        print("      so an empty onX import confirms the ground is clear.")
+
+
+def xml_esc(t):
+    return (str(t).replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;"))
 
 
 def trim_coords_geom(g):

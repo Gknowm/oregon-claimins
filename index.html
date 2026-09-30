@@ -409,7 +409,14 @@ var map=new maplibregl.Map({
     /* Without "glyphs" MapLibre rejects every symbol layer outright, so no
        label of any kind renders - claim names, site names, waypoint names.
        Needs signal; offline the labels simply do not draw, same as before. */
-    glyphs:"https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+    /* Fonts ship with the app in vendor/fonts, so labels draw with no
+       signal. They used to come from demotiles.maplibre.org, which meant
+       every name and pin number vanished offline. Built as a full address
+       because MapLibre will not resolve a relative glyph path. Only two
+       font names exist here - NotoSansBold and NotoSansRegular - and every
+       label layer names one of them, because a layer that names none asks
+       for MapLibre's default font, which is not in the folder. */
+    glyphs:new URL("vendor/fonts/",location.href).href+"{fontstack}/{range}.pbf",
     sources:{base:{type:"raster",tiles:[BASE.topo.tiles],tileSize:256,maxzoom:16,attribution:BASE.topo.attr}},
     layers:[{id:"base",type:"raster",source:"base"}]},
   center:START,zoom:START_Z,maxZoom:17,
@@ -1040,7 +1047,7 @@ map.on("load",function(){
   map.addLayer({id:"wp-label",type:"symbol",source:"wp",minzoom:11,
     layout:{"text-field":["get","name"],"text-size":13.5,"text-offset":[0,1.15],
             "text-anchor":"top","text-allow-overlap":false,
-            "text-font":["Noto Sans Bold"]},
+            "text-font":["NotoSansBold"]},
     paint:{"text-color":"#4A1502","text-halo-color":"#FFFFFF","text-halo-width":2.2}});
   wpRefresh();
   importBoot();
@@ -1177,11 +1184,12 @@ function importDraw(set){
     filter:["all",["==",["geometry-type"],"Point"],["<=",["length",lab],3]],
     layout:{visibility:vis,"text-field":lab,"text-size":13,"text-anchor":"center",
       "text-allow-overlap":true,"text-ignore-placement":true,
-      "text-font":["Noto Sans Bold"]},
+      "text-font":["NotoSansBold"]},
     paint:{"text-color":"#FFFFFF"}});
   addLayerSafe({id:sid+"-t2",type:"symbol",source:sid,minzoom:10,
     filter:["all",["==",["geometry-type"],"Point"],[">",["length",lab],3]],
     layout:{visibility:vis,"text-field":lab,"text-size":12,"text-offset":[0,1.2],
+      "text-font":["NotoSansRegular"],
       "text-anchor":"top","text-allow-overlap":false},
     paint:{"text-color":"#2E2A20","text-halo-color":"rgba(255,255,255,.95)",
            "text-halo-width":2}});
@@ -1512,7 +1520,9 @@ function bboxOf(g){
    at the top of the menu with a one-tap offline save for each.
    ------------------------------------------------------------------ */
 var ZONES=null;
-var ZONE_COLOR={placer:"#E8A200", sunstone:"#C1520F"};
+var ZONE_COLOR={placer:"#E8A200", sunstone:"#C1520F", specimen:"#1F9E6E"};
+var ZONE_GROUPS=[["placer","Placer gold"],["sunstone","Sunstone"],
+                 ["specimen","Garnet and chrome diopside"]];
 var ZONE_MAXZ=16;   /* the topo tiles stop at 16 */
 
 function zoneBbox(f){ return bboxOf(f.geometry); }
@@ -1531,19 +1541,22 @@ function zonesBoot(fetchOnce){
     }
     ZONES=g;
     if(src){
-      var np=g.features.filter(function(f){return f.properties.kind==="placer";}).length;
-      src.textContent=np+" placer, "+(g.features.length-np)+" sunstone";
+      src.textContent=ZONE_GROUPS.map(function(gp){
+        var n=g.features.filter(function(f){return f.properties.kind===gp[0];}).length;
+        return n?n+" "+gp[0]:"";
+      }).filter(Boolean).join(", ");
     }
     map.addSource("zones",{type:"geojson",data:g});
     addLayerSafe({id:"zones-l",type:"line",source:"zones",
-      paint:{"line-color":["match",["get","kind"],"placer",ZONE_COLOR.placer,ZONE_COLOR.sunstone],
+      paint:{"line-color":["match",["get","kind"],"placer",ZONE_COLOR.placer,
+                           "specimen",ZONE_COLOR.specimen,ZONE_COLOR.sunstone],
              "line-width":["interpolate",["linear"],["zoom"],6,1.5,12,2.5],
              "line-dasharray":[3,2]}});
     addLayerSafe({id:"zones-t",type:"symbol",source:"zones",minzoom:7,maxzoom:13,
       layout:{"text-field":["get","name"],"text-size":12.5,"text-anchor":"bottom-left",
-              "text-offset":[0.3,-0.3],"text-font":["Noto Sans Bold"],
+              "text-offset":[0.3,-0.3],"text-font":["NotoSansBold"],
               "symbol-placement":"point","text-allow-overlap":false},
-      paint:{"text-color":["match",["get","kind"],"placer","#6B4A00","#6B2A06"],
+      paint:{"text-color":["match",["get","kind"],"placer","#6B4A00","specimen","#0E5A3D","#6B2A06"],
              "text-halo-color":"rgba(255,255,255,.95)","text-halo-width":2}});
     zonesToTop();
     renderZones();
@@ -1566,7 +1579,7 @@ function renderZones(){
     el.innerHTML='<div class="zhead"><span>No zones yet. Run fetch.py, then reload.</span></div>';
     return;
   }
-  var groups=[["placer","Placer gold"],["sunstone","Sunstone"]];
+  var groups=ZONE_GROUPS;
   el.innerHTML=groups.map(function(gp){
     var list=ZONES.features.map(function(f,i){return {f:f,i:i};})
       .filter(function(x){return x.f.properties.kind===gp[0];});
@@ -1741,6 +1754,7 @@ function build(L,geoj){
         "circle-stroke-opacity":["case",["==",["get","_seen"],1],0.5,0.95]}});
     addLayerSafe({id:L.id+"-t",type:"symbol",source:L.srcId,minzoom:11,
       layout:{visibility:vis,"text-field":["coalesce",["get","name"],""],
+              "text-font":["NotoSansRegular"],
               "text-size":11.5,"text-offset":[0,1.1],"text-anchor":"top",
               "text-allow-overlap":false},
       filter:rhFilter(L),
@@ -1756,6 +1770,7 @@ function build(L,geoj){
              "circle-stroke-opacity":.95}};
     var lbl={id:L.id+"-t",type:"symbol",source:L.srcId,minzoom:13,
       layout:{visibility:vis,"text-field":["coalesce",["get","SiteName"],""],
+              "text-font":["NotoSansRegular"],
               "text-size":11.5,"text-offset":[0,1.0],"text-anchor":"top",
               "text-allow-overlap":false},
       paint:{"text-color":"#2E2A20","text-halo-color":"rgba(255,255,255,.95)",
@@ -1787,7 +1802,8 @@ function build(L,geoj){
   if(L.label){
     addLayerSafe({id:L.id+"-t",type:"symbol",source:L.srcId,
       minzoom:(L.labelMinzoom!==undefined?L.labelMinzoom:13),
-      layout:{visibility:vis,"text-field":L.label,"text-size":12,"text-allow-overlap":false},
+      layout:{visibility:vis,"text-field":L.label,"text-size":12,"text-allow-overlap":false,
+              "text-font":["NotoSansRegular"]},
       paint:{"text-color":"#2C1A12","text-halo-color":"rgba(242,237,226,.92)","text-halo-width":1.6}});
   }
 }
